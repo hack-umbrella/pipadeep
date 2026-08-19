@@ -1,0 +1,33 @@
+# dsh-pentest bundle patch：在 dsh-base + dsh-web-app 之上的渗透测试面。
+# 一个自包含包，每个 row 都解析到本包自己的子路径，整包可用 `dsh plugin add` 一条命令安装。
+#
+# 补丁层贡献四件事：
+# 1. sqlite 后端 row（本包子路径）——渗透记录专用持久化；
+# 2. Web 表面 row（按会话注册的「渗透」视图标签页），浏览器半是本包的 `./client` export；
+# 3. storage-domain 路由——仅把 `pentest` 域路由到 sqlite，宿主其它域仍走默认 json 后端
+#    （覆盖会替换目标 row 的整套 config，故此处重述宿主默认 backend）；
+# 4. 只读 preset root——把本包内 `preset/` 目录注册为 agent 预设根（不拷贝进 DSH_HOME）。
+#
+# 宿主插件 `pentest`（记录层）与 `pentest-tools`（执行层）只属于 `pentest` agent 预设，
+# 在此处再次注册会在选中该预设时重复其作用域工具目录，引发客户端命令失效循环，故不进补丁。
+
+- insert:
+    - id: ui-pentest
+      name: '@pipadeep/dsh-pentest/ui-pentest'
+
+    - id: storage-sqlite
+      name: '@pipadeep/dsh-pentest/storage-sqlite'
+      config:
+        path: !!js dshHomePath('storages', 'pentest-sessions.db')
+
+- id: storage-domain
+  config:
+    backend: json
+    routes:
+      pentest: sqlite
+
+# DSH rc.6 在 profile 组合期间会用其内置 preset root 替换此 row 配置的 roots；
+# `preset-root` 在 agent-presets 构建完成后，把本包的只读 root 加进去，无需拷贝文件到 DSH_HOME。
+- insert:
+    - id: pentest-preset-root
+      name: '@pipadeep/dsh-pentest/preset-root'

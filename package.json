@@ -1,0 +1,54 @@
+{
+  "name": "@pipadeep/dsh-pentest",
+  "description": "DSH 渗透测试模式（合并版）：记录层（探索链路/资产/漏洞图 + 会话投影 + Web 视图）+ 执行层（31 个资产测绘/JS审计/漏洞发现/利用/payload 工具）。",
+  "version": "0.2.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./pentest": "./lib/pentest.js",
+    "./pentest-tools": "./lib/pentest-tools.js",
+    "./storage-sqlite": "./lib/storage-sqlite.js",
+    "./preset-root": "./lib/preset-root.js",
+    "./ui-pentest": "./lib/ui-pentest.js",
+    "./ui-pentest/package.json": "./package.json",
+    "./client": "./lib/ui-pentest.client.js",
+    "./invariant": "./lib/invariant.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**/*.js",
+    "preset/pentest/**",
+    "cordis.patch.yml"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ],
+      "platform": "web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-invariants": "0.1.0-rc.6"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-invariants": {
+      "optional": true
+    }
+  }
+}
