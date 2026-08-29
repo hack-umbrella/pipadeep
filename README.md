@@ -23,7 +23,7 @@
 从本地 tarball 安装：
 
 ```powershell
-dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.4.0.tgz
+dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.4.1.tgz
 ```
 
 > `-w` 是因为 web profile 是 pnpm workspace 根（pnpm 10 需要显式 `--workspace-root`）。
@@ -86,18 +86,14 @@ dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.4.0.tgz
 
 > 更新技能=改 `SKILL.md` 文件即可（无需重装/重启）。
 
-## 管理面板（UI）
+## 管理（选择 / 添加）
 
-插件提供两层「选择/添加」：
+提供两层：
 
-1. **对话式（已可用、可测）**：`pentest_bypass_list/add/remove`、`pentest_skill_list/add` —— 直接对话即可增删绕过/技能。
-2. **图形面板（实验性）**：对标 dsh-auto-memory 的「host 挂 `/api/<plugin>/*` loopback 路由 + 浏览器 fetch」模式。
-   - **数据 API（已接线、已测）**：`lib/bypass-routes.js` 提供 `/api/pipadeep-pentest/bypass`(GET/POST)、`/bypass/remove`(POST)、`/skills`(GET/POST)，读写绕过库与技能。已在 `cordis.patch.yml` 注册 `bypass-routes` 行。
-   - **面板组件（已写好，待接入）**：`lib/ui-pentest-manager.client.js` 用 `slots.inject("conversation.view")` + `react.createElement` + `fetch` 渲染「绕过/技能」管理 tab。
+1. **对话式（主推，已可用、可测）**：`pentest_bypass_list/add/remove`、`pentest_skill_list/add` —— 直接对话即可增删绕过/技能。
+2. **数据 API（已接线、已测）**：`lib/bypass-routes.js` 提供 `/api/pipadeep-pentest/bypass`(GET/POST)、`/bypass/remove`(POST)、`/skills`(GET/POST)，读写绕过库与技能；已在 `cordis.patch.yml` 注册 `bypass-routes` 行，供脚本/外部 UI 复用。
 
-> ⚠️ 面板接入状态：`ManagerView`（绕过/技能 面板）**已并入** `lib/ui-pentest.client.js` 的 `apply(ctx)`，以第二个 `slots.register(id: "pentest-manager")` 挂到 `conversation.view`（复用现有 `isPentestSession` 门控）。请在你真实 dsh web 里验证 `conversation.view` 槽位是否支持**多个面板**：若出现「绕过 / 技能」与「渗透」并存则 OK；若后者被覆盖/冲突，告诉我，我改成把管理页作为 `PentestView` 里的一个 tab。
-
-> 无论面板是否上屏，**对话式管理工具始终可用**（它们是面板背后的同一套数据 API）。
+> 图形化「绕过/技能」面板（`ui-pentest-manager.client.js`）在 0.4.0 曾并入 client bundle，但二次注册 `conversation.view` 槽位会覆盖原有「渗透」面板，已在 0.4.1 回滚移除。后续若要图形面板，需在 `PentestView` 内部新增一个 tab（而非第二个 slot），待验证后再加。
 
 
 
