@@ -1,7 +1,7 @@
 {
   "name": "@pipadeep/dsh-pentest",
   "description": "DSH 渗透测试模式（合并版）：记录层（探索链路/资产/漏洞图 + 会话投影 + Web 视图）+ 执行层（31 个资产测绘/JS审计/漏洞发现/利用/payload 工具）。",
-  "version": "0.2.1",
+  "version": "0.4.0",
   "publishConfig": {
     "access": "public"
   },
@@ -9,6 +9,7 @@
   "main": "./lib/index.js",
   "exports": {
     ".": "./lib/index.js",
+    "./bypass-routes": "./lib/bypass-routes.js",
     "./pentest": "./lib/pentest.js",
     "./pentest-tools": "./lib/pentest-tools.js",
     "./storage-sqlite": "./lib/storage-sqlite.js",
@@ -23,7 +24,11 @@
   "files": [
     "lib/**/*.js",
     "preset/pentest/**",
-    "cordis.patch.yml"
+    "skills/**",
+    "pentest-bypass.example.json",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
   ],
   "license": "MIT",
   "dsh": {

@@ -15,6 +15,9 @@
     - id: ui-pentest
       name: '@pipadeep/dsh-pentest/ui-pentest'
 
+    - id: bypass-routes
+      name: '@pipadeep/dsh-pentest/bypass-routes'
+
     - id: storage-sqlite
       name: '@pipadeep/dsh-pentest/storage-sqlite'
       config:
