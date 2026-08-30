@@ -23,7 +23,7 @@
 从本地 tarball 安装：
 
 ```powershell
-dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.4.2.tgz
+dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.4.3.tgz
 ```
 
 > `-w` 是因为 web profile 是 pnpm workspace 根（pnpm 10 需要显式 `--workspace-root`）。
