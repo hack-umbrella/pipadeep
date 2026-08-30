@@ -3,16 +3,16 @@
 面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）的渗透测试模式 —— 一个**记录层 + 执行层**合并的自包含插件 bundle：
 
 - **记录层**（来自 [howmp/dsh-pentest](https://github.com/howmp/dsh-pentest)）：把一次授权渗透测试建模成一张**带语义边的探索链路图**（goal → intent → fact → finding + 资产树），并在 Web 中以「探索链路 / 漏洞 / 资产 / 报告」四个视图实时可视化。
-- **执行层**（本项目自研）：39 个真正动手的 `pentest_*` 工具（资产测绘 / JS·API 审计 / 敏感信息 / Web 漏洞发现 / 漏洞利用 / payload 生成 / WAF 指纹 / 自定义绕过库 / 范围门禁 / 绕过·技能管理），由**执行子 agent** 调用，结果经 `pentest_submit` 直写回父 intent。
+- **执行层**（本项目自研，v0.5 瘦身）：仅 4 个薄工具 —— `pentest_arsenal`（调 arsenal 容器里的 nmap/nuclei/sqlmap/ysuserial/JNDI/内存马等真实武器）/ `pentest_scope`（授权门禁）/ `pentest_bypass`（知识懒加载）/ `pentest_submit_flag`（平台）。由**执行子 agent** 调用，结果经 `pentest_submit` 直写回父 intent。
 
-一句话：dsh-pentest 缺「引擎」（它只记录、不扫描，探测靠裸 `bash`），本项目的 39 个执行工具补上了这一半，于是记录、执行、可视化形成闭环。
+一句话：v0.5 起，记录、执行、可视化形成闭环——记录层管图，执行层不再把武器注册成模型工具，而是由 `pentest_arsenal` 把探测/利用下沉到 arsenal 容器（Kali + JDK8 + 真实武器库）。
 
 ## 特性
 
 | 面 | 内容 |
 |---|---|
 | 记录层 | `pentest` storage-domain（6 表：goals/intents/facts/findings/assets/edges）+ 确定性 id（`<kind>-<n>`）+ 会话投影纯重放 |
-| 执行层 | 39 个 `pentest_*` 工具：portscan / banner / httpprobe / dirscan / dns / whois / ssl / nuclei / subdomains / wayback / linkcrawl / jsaudit / sensitive / paramfuzz / sqli_check·exploit / xss / lfi_check·read / rce / ssti / ssrf / xxe / jwt / idor / upload / deser / bruteforce / payload / bootstrap / submit_flag / **waf** / **bypass** / **scope** / **bypass_list·add·remove** / **skill_add·list** |
+| 执行层 | 4 个薄工具：**arsenal**（调容器武器）/ **scope**（门禁）/ **bypass**（知识懒加载）/ **submit_flag**（平台）。真实武器在 arsenal 容器里（nmap/nuclei/sqlmap/hydra/msfconsole/ysuserial/JNDIExploit/java-chains） |
 | Web 视图 | 探索链路（@xyflow/react 图，边带「意图链/产出/推导自/证实」关系胶囊）、漏洞（严重度/可复现步骤/影响资产）、资产（列表/图）、报告（Markdown 渲染·复制·保存） |
 | 编排 | 指挥官（决策 agent）建 goal/intent，执行子 agent 只被授予 `pentest_submit` + 执行工具，`toolFilter.deny` 禁掉记录与委派工具 |
 | 持久化 | 仅 `pentest` 域路由到 sqlite（`$DSH_HOME/storages/pentest-sessions.db`），宿主其它域仍走默认 json 后端 |
@@ -23,7 +23,7 @@
 从本地 tarball 安装：
 
 ```powershell
-dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.4.3.tgz
+dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.5.0.tgz
 ```
 
 > `-w` 是因为 web profile 是 pnpm workspace 根（pnpm 10 需要显式 `--workspace-root`）。
@@ -42,25 +42,20 @@ dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.4.3.tgz
 - **领域模型**（`lib/pentest.js`，vendored）：storage domain `pentest`（version 2）——`goals / intents / facts / findings / assets / edges` 六张表。边即链路词汇：`spawns`(goal→intent)、`yields`(intent→fact)、`derived_from`(fact→intent)、`proves`(intent→finding)、`parent`(asset→asset)。finding 必填 `reproducibleSteps`（至少一条）。
 - **确定性 id**：节点/边 id 为 `<kind>-<n>`（按会话计数），工具返回 id 供模型跨调用引用；会话投影从日志纯重放同一张图，Web 端不读数据库。
 - **记录工具**（9 个）：`pentest_submit` / `pentest_add_goal` / `pentest_add_intent` / `pentest_add_fact` / `pentest_add_finding` / `pentest_add_asset` / `pentest_state` / `pentest_graph` / `pentest_report`。
-- **执行工具**（39 个，`lib/pentest-tools.js`）：本项目的自研源码，纯 JS、零外部 import。代理默认走 `127.0.0.1:8080`（可用 `PENTEST_PROXY` 覆盖/关闭）；关键扫描工具（portscan/dns/whois/ssl/banner/nuclei）带 **依赖检测**，缺装给明示。
+- **执行工具**（4 个，`lib/pentest-tools.js`）：纯 JS、零外部 import。`pentest_arsenal` 等价 `docker exec arsenal arsenal <tool> <args>`（需 dsh 宿主可访问 docker）；`pentest_scope` 读 `PENTEST_SCOPE`；`pentest_bypass` 读 `PENTEST_BYPASS_FILE`。
 - **协议**：`pentest:protocol` 系统提示段（指挥官沿链路推进、子 agent 经 `pentest_submit` 直写父 intent、与用户交互一律中文）+ `tool:pentest-tools` 速查段（SQLi/LFI/命令注入/上传绕过/Python 沙箱逃逸/flag 位置）。
 - **Web 视图**（`lib/ui-pentest.client.js`，vendored）：按会话注册（当前会话或祖先链含 `pentest` 预设才显示，非渗透会话隐藏）；四个子标签。
 
 ## 执行层增强（本仓库增量）
 
-在 vendored 记录层之上，`lib/pentest-tools.js`（自研、纯 JS、可改）提供 **39 个**执行工具，并新增「按需懒加载 / 对话式管理」能力：
+在 vendored 记录层之上，`lib/pentest-tools.js`（自研、纯 JS、可改）v0.5 瘦身为 **4 个薄工具**（对齐 Cairn_Y「模型界面要小、武器进环境」）：
 
-- **`pentest_scope`**：查看/检查授权范围（来自 `PENTEST_SCOPE` 环境变量），配置后进入**工具级门禁**，白名单外的目标/URL 会被 block。
-- **`pentest_waf`**：抓取目标响应头/正文，识别 Cloudflare/ModSecurity/Sucuri/F5/AWS WAF 等防护指纹。
-- **`pentest_bypass`**：**读取你的自定义绕过库**（`PENTEST_BYPASS_FILE` 指向的 JSON，可从 `pentest-bypass.example.json` 复制开始），按漏洞类型 + WAF 返回你手动维护的手法。**不内置任何硬编码绕过**——手法由你添加/更新。
+- **`pentest_arsenal`**：调 arsenal 容器武器（`docker exec arsenal arsenal <tool> <args>`），覆盖 nmap/nuclei/sqlmap/ysuserial/JNDI/内存马/java-chains 等。
+- **`pentest_scope`**：查看/检查授权范围（`PENTEST_SCOPE`），配置后进入**工具级门禁**。
+- **`pentest_bypass`**：读取你的知识库 JSON（`PENTEST_BYPASS_FILE`，绕过手法/PoC/技巧），按需返回。
+- **`pentest_submit_flag`**：tsec 平台 flag 提交。
 
-以上工具都不打进常驻提示，只在需要时调用，**节省每轮上下文 token**，也给模型留出更多推理空间。
-
-**绕过库**：绕过思路完全由你控制。复制 `pentest-bypass.example.json` 为 `pentest-bypass.json`（或用 `PENTEST_BYPASS_FILE` 指向它），编辑 JSON 即可增删手法；改完无需重启，下轮 `pentest_bypass` 读取即生效。
-
-**对话式管理（选择 / 添加）**：除了改文件，也能用对话直接管理——
-- `pentest_bypass_list` / `pentest_bypass_add` / `pentest_bypass_remove`：列出/新增/删除绕过手法（写入你的绕过库）。
-- `pentest_skill_list` / `pentest_skill_add`：列出/新建技能（写入 `PENTEST_SKILLS_DIR`，默认 `.dsh/skills`，dsh 自动发现免重启）。
+以上薄工具都不打进常驻提示，只在需要时调用，**节省每轮上下文 token**，给模型留出推理空间。
 
 ## 可配置环境变量
 
@@ -142,7 +137,7 @@ dsh-pentest/                       # bundle 根 = 包 @pipadeep/dsh-pentest
 
 本项目**基于 [howmp/dsh-pentest](https://github.com/howmp/dsh-pentest)（MIT）增强**。记录层（`lib/pentest.js`）、Web 视图（`lib/ui-pentest*.js`）、sqlite 后端（`lib/storage-sqlite.js`）、预设根（`lib/preset-root.js`）均 vendored 自原项目构建产物；本项目的增量是：
 
-- 新增 `lib/pentest-tools.js`（39 个执行工具，替换掉原「探测靠裸 bash」的空缺），含 WAF 指纹 / 自定义绕过库 / 范围门禁 / 绕过·技能管理，并支持代理可配置 + 依赖检测。
+- 新增 `lib/pentest-tools.js`（v0.5 起瘦身为 4 个薄工具，执行下沉到 arsenal 容器），含范围门禁 / 知识懒加载 / 平台提交。
 - `cordis.patch.yml` 不变地保留原四件事（sqlite 后端 / `pentest→sqlite` 路由 / Web 视图 row / preset root）。
 - `preset/pentest/agent.cordis.yml` 在指挥官预设里追加 `pentest-tools` row，并让执行子 agent 显式使用这些工具。
 
