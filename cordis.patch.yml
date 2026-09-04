@@ -35,3 +35,9 @@
 - insert:
     - id: pentest-preset-root
       name: '@pipadeep/dsh-pentest/preset-root'
+
+# 全局渗透任务数据路由（只读，loopback）：供 Web「全部任务」面板在任何会话里
+# 列出 pentest SQLite 存储中的所有 engagement；不经过会话投影，不受 resume 影响。
+- insert:
+    - id: pentest-routes
+      name: '@pipadeep/dsh-pentest/engagements-routes'

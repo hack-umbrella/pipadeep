@@ -1,15 +1,20 @@
 {
   "name": "@pipadeep/dsh-pentest",
   "description": "DSH 渗透测试模式（合并版）：记录层（探索链路/资产/漏洞图 + 会话投影 + Web 视图）+ 执行层（4 个薄工具：arsenal/scope/bypass/submit_flag，武器下沉 arsenal 容器）。",
-  "version": "1.0.1",
+  "version": "1.1.1",
   "publishConfig": {
     "access": "public"
   },
   "type": "module",
   "main": "./lib/index.js",
+  "scripts": {
+    "test": "node --test test/lossless-json.test.mjs",
+    "test:boot": "node test/boot-graph.mjs"
+  },
   "exports": {
     ".": "./lib/index.js",
     "./bypass-routes": "./lib/bypass-routes.js",
+    "./engagements-routes": "./lib/engagements-routes.js",
     "./pentest": "./lib/pentest.js",
     "./pentest-tools": "./lib/pentest-tools.js",
     "./storage-sqlite": "./lib/storage-sqlite.js",
