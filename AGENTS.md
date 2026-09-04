@@ -32,7 +32,8 @@ export 保持一致。
 1. `node --check` 所有被改的 JS。
 2. 用 js-yaml 校验 `preset/pentest/agent.cordis.yml` 与 `cordis.patch.yml`（注册 `!!js` 标量类型）。
 3. `dsh --profile web --dump-config` 确认 `storage-domain` 路由 `pentest: sqlite` 及
-   `ui-pentest` / `storage-sqlite` / `pentest-preset-root` 三行就位。
+   `ui-pentest`（行名必须用裸包名 `@pipadeep/dsh-pentest`，子路径会导致 client-modules 扫描不到）
+   / `storage-sqlite` / `pentest-preset-root` 三行就位。
 4. 重新 `npm pack`，并用 `dsh plugin remove -w` + `add -w` 重装（pnpm 会按 `file:` 路径
    解析依赖，删除旧 tarball 前必须先 remove）。
 

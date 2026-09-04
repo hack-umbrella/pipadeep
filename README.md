@@ -44,7 +44,7 @@ dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.5.0.tgz
 - **记录工具**（9 个）：`pentest_submit` / `pentest_add_goal` / `pentest_add_intent` / `pentest_add_fact` / `pentest_add_finding` / `pentest_add_asset` / `pentest_state` / `pentest_graph` / `pentest_report`。
 - **执行工具**（4 个，`lib/pentest-tools.js`）：纯 JS、零外部 import。`pentest_arsenal` 等价 `docker exec arsenal arsenal <tool> <args>`（需 dsh 宿主可访问 docker）；`pentest_scope` 读 `PENTEST_SCOPE`；`pentest_bypass` 读 `PENTEST_BYPASS_FILE`。
 - **协议**：`pentest:protocol` 系统提示段（指挥官沿链路推进、子 agent 经 `pentest_submit` 直写父 intent、与用户交互一律中文）+ `tool:pentest-tools` 速查段（SQLi/LFI/命令注入/上传绕过/Python 沙箱逃逸/flag 位置）。
-- **Web 视图**（`lib/ui-pentest.client.js`，vendored）：按会话注册（当前会话或祖先链含 `pentest` 预设才显示，非渗透会话隐藏）；四个子标签。
+- **Web 视图**（`lib/ui-pentest.client.js`，vendored）：按会话注册（当前会话或祖先链含 `pentest` 预设才显示，非渗透会话隐藏）；四个子标签。v1.0 起 `cordis.patch.yml` 里 `ui-pentest` 行改用**裸包名** `@pipadeep/dsh-pentest` 注册，客户端模块才会被 dsh 的 client-modules 扫描器发现并注入 boot graph（此前子路径名被 `exactPackageSpecifier` 拒绝、UI 静默缺失）；浏览器半注册 id 亦改为裸包名保持一致。
 
 ## 执行层增强（本仓库增量）
 

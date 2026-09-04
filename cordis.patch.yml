@@ -11,9 +11,13 @@
 # 宿主插件 `pentest`（记录层）与 `pentest-tools`（执行层）只属于 `pentest` agent 预设，
 # 在此处再次注册会在选中该预设时重复其作用域工具目录，引发客户端命令失效循环，故不进补丁。
 
+# client-modules 扫描器只按「裸包名」识别客户端 bundle：loader 行的 name 必须是
+# @pipadeep/dsh-pentest（子路径 @pipadeep/dsh-pentest/ui-pentest 会被
+# exactPackageSpecifier 拒绝而静默跳过，导致「渗透」UI 从 boot graph 缺失）。
+# 该行宿主半仍为空 apply，浏览器半经 exports["./client"] 注入，故直接用裸包名。
 - insert:
     - id: ui-pentest
-      name: '@pipadeep/dsh-pentest/ui-pentest'
+      name: '@pipadeep/dsh-pentest'
 
     - id: storage-sqlite
       name: '@pipadeep/dsh-pentest/storage-sqlite'
