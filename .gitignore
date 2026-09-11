@@ -2,3 +2,7 @@ node_modules/
 *.tgz
 .DS_Store
 npm-debug.log*
+
+# python bytecode cache (mitmproxy addon)
+__pycache__/
+*.pyc
