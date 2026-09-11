@@ -83,6 +83,11 @@ function wireStates() {
 		steps: ["s1", "s2"]
 	};
 	const findingWithAsset = { ...findingWithoutAsset, id: "finding-2", affectedAssetId: "asset-16" };
+	const findingWithEvidence = { ...findingWithAsset, id: "finding-3", evidence: [
+		{ kind: "screenshot", path: "/ev/f3/poc.png", label: "IDOR 截图" },
+		{ kind: "http", path: "/ev/f3/poc.http", label: "原始请求/响应" },
+		{ kind: "script", path: "/ev/f3/poc.shot.mjs", label: "" }
+	] };
 	const fact = {
 		id: "fact-1",
 		kind: "fact",
@@ -94,7 +99,7 @@ function wireStates() {
 	};
 	const intent = { id: "intent-1", kind: "intent", title: "t", detail: "d" };
 	const goal = { id: "goal-1", target: "t", objective: "o", authorization: "a" };
-	const nodes = [intent, fact, findingWithoutAsset, findingWithAsset];
+	const nodes = [intent, fact, findingWithoutAsset, findingWithAsset, findingWithEvidence];
 	return {
 		"pre-init null": null,
 		"engagement with findings (no/with affectedAssetId)": {
@@ -102,7 +107,7 @@ function wireStates() {
 			nodes,
 			assets: [{ id: "asset-16", type: "subdomain", value: "a.example.com", meta: "m" }],
 			edges: [{ id: "edge-1", kind: "proves", sourceId: "intent-1", targetId: "finding-1" }],
-			counts: { intents: 1, facts: 1, findings: 2, assets: 1 }
+			counts: { intents: 1, facts: 1, findings: 3, assets: 1 }
 		},
 		"empty counts zeros": {
 			goal,

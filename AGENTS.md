@@ -26,6 +26,9 @@ export 保持一致。
   node -e "import('<profile>/node_modules/@pipadeep/dsh-pentest/lib/pentest-tools.js').then(m=>console.log(Object.keys(m)))"
   ```
 - `node --check lib/pentest-tools.js`：语法检查执行层源码。
+- `node --check lib/shot.js` / `node --check lib/shot-runner.js`：截图执行器与 Playwright runner。
+- `npm test`：lossless-JSON 契约（含 finding.evidence）+ `pentest_shot` 端到端集成（需 mitmdump/python3/playwright，缺失自动 skip）。
+- 截图证据链文件：`lib/shot.js`（工具编排/代理管理/证据取回）、`lib/shot-runner.js`（Playwright headless=new 截图）、`lib/mitm-addon.py`（按 `X-Pentest-Evidence` 头索引原始请求）；证据落 `$DSH_HOME/storages/evidence`，Web 只读路由 `/api/pipadeep-pentest/evidence`。
 
 ## 改动后的验证清单
 

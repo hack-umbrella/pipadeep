@@ -42,20 +42,35 @@ dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.5.0.tgz
 - **领域模型**（`lib/pentest.js`，vendored）：storage domain `pentest`（version 2）——`goals / intents / facts / findings / assets / edges` 六张表。边即链路词汇：`spawns`(goal→intent)、`yields`(intent→fact)、`derived_from`(fact→intent)、`proves`(intent→finding)、`parent`(asset→asset)。finding 必填 `reproducibleSteps`（至少一条）。
 - **确定性 id**：节点/边 id 为 `<kind>-<n>`（按会话计数），工具返回 id 供模型跨调用引用；会话投影从日志纯重放同一张图，Web 端不读数据库。
 - **记录工具**（9 个）：`pentest_submit` / `pentest_add_goal` / `pentest_add_intent` / `pentest_add_fact` / `pentest_add_finding` / `pentest_add_asset` / `pentest_state` / `pentest_graph` / `pentest_report`。
-- **执行工具**（4 个，`lib/pentest-tools.js`）：纯 JS、零外部 import。`pentest_arsenal` 等价 `docker exec arsenal arsenal <tool> <args>`（需 dsh 宿主可访问 docker）；`pentest_scope` 读 `PENTEST_SCOPE`；`pentest_bypass` 读 `PENTEST_BYPASS_FILE`。
+- **执行工具**（5 个，`lib/pentest-tools.js`）：`pentest_arsenal` 等价 `docker exec arsenal arsenal <tool> <args>`（需 dsh 宿主可访问 docker）；`pentest_scope` 读 `PENTEST_SCOPE`；`pentest_bypass` 读 `PENTEST_BYPASS_FILE`。
 - **协议**：`pentest:protocol` 系统提示段（指挥官沿链路推进、子 agent 经 `pentest_submit` 直写父 intent、与用户交互一律中文）+ `tool:pentest-tools` 速查段（SQLi/LFI/命令注入/上传绕过/Python 沙箱逃逸/flag 位置）。
 - **Web 视图**（`lib/ui-pentest.client.js`，vendored）：按会话注册（当前会话或祖先链含 `pentest` 预设才显示，非渗透会话隐藏）；四个子标签。v1.0 起 `cordis.patch.yml` 里 `ui-pentest` 行改用**裸包名** `@pipadeep/dsh-pentest` 注册，客户端模块才会被 dsh 的 client-modules 扫描器发现并注入 boot graph（此前子路径名被 `exactPackageSpecifier` 拒绝、UI 静默缺失）；浏览器半注册 id 亦改为裸包名保持一致。
 
 ## 执行层增强（本仓库增量）
 
-在 vendored 记录层之上，`lib/pentest-tools.js`（自研、纯 JS、可改）v0.5 瘦身为 **4 个薄工具**（对齐 Cairn_Y「模型界面要小、武器进环境」）：
+在 vendored 记录层之上，`lib/pentest-tools.js`（自研、纯 JS、可改）为 **5 个薄工具**（对齐 Cairn_Y「模型界面要小，武器进环境」）：
 
 - **`pentest_arsenal`**：调 arsenal 容器武器（`docker exec arsenal arsenal <tool> <args>`），覆盖 nmap/nuclei/sqlmap/ysuserial/JNDI/内存马/java-chains 等。
 - **`pentest_scope`**：查看/检查授权范围（`PENTEST_SCOPE`），配置后进入**工具级门禁**。
 - **`pentest_bypass`**：读取你的知识库 JSON（`PENTEST_BYPASS_FILE`，绕过手法/PoC/技巧），按需返回。
+- **`pentest_shot`**（v1.2.0）：本机无头浏览器（Playwright/Chrome, headless=new）打开目标并**截图取证**，默认经 mitmproxy（上游可转发 Burp）把**原始请求/响应**一并取回，落盘成「截图 + `.http` 原始包 + `.shot.mjs` 可复现脚本」三件套；回传的 `evidence` 原样传给 `pentest_add_finding`/`pentest_submit`，报告自动嵌图。
 - **`pentest_submit_flag`**：tsec 平台 flag 提交。
 
 以上薄工具都不打进常驻提示，只在需要时调用，**节省每轮上下文 token**，给模型留出推理空间。
+
+### 浏览器截图证据链（v1.2.0）
+
+```
+Playwright(本机 Chrome, headless=new)  --proxy-->  mitmproxy :8081  --upstream-->  Burp :8080  -->  目标
+        └─ 携带 X-Pentest-Evidence: <runId>          └─ 按 runId 落原始请求/响应（证据索引 + HAR）
+```
+
+- **工具**：`pentest_shot({ url, findingId?, label?, steps?, fullPage?, headers?, cookies?, proxy? })`；`steps` 支持 `goto/fill/click/press/waitForSelector/wait/screenshot/hover/select/evaluate`。
+- **产出**：`$DSH_HOME/storages/evidence/<findingId>/….png | .http | .shot.mjs`，`evidence` 数组回传后写进 finding。
+- **代理链**：工具自动拉起 mitmproxy（`lib/mitm-addon.py` 按证据头索引原始包），上游默认转发 Burp（`PENTEST_SHOT_UPSTREAM` 可改 / 置空直连）；已在跑则不重复启动。
+- **Web 证据**：漏洞 tab 直接显示截图缩略图（经只读路由 `/api/pipadeep-pentest/evidence?path=…`，限证据目录内）；报告 Markdown 嵌入 `![](path)`。
+- **CA**：默认 `ignoreHTTPSErrors`（多层 TLS 直放，渗透场景可接受）；需严格校验时把 mitmproxy CA 装进专用 Chrome profile。
+- **前提**：`npm i -g playwright`（+ 本机 Chrome）与 `brew install mitmproxy`；缺失时工具返回明确报错。
 
 ## 可配置环境变量
 
@@ -65,6 +80,11 @@ dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.5.0.tgz
 | `PENTEST_SCOPE` | 授权范围，逗号分隔的域名/IP/CIDR；配置后启用工具级门禁 | 未设置=放行（建议设置） |
 | `PENTEST_BYPASS_FILE` | 你的自定义绕过库 JSON 路径 | `./pentest-bypass.json` |
 | `PENTEST_SKILLS_DIR` | `pentest_skill_add` 写入技能目录（dsh 扫描根） | `.dsh/skills` |
+| `PENTEST_SHOT_PROXY` | `pentest_shot` 浏览器代理入口（mitmproxy） | `http://127.0.0.1:8081` |
+| `PENTEST_SHOT_UPSTREAM` | mitmproxy 上游代理（转发 Burp/Yakit）；置空=直连 | `http://127.0.0.1:8080` |
+| `PENTEST_SHOT_PORT` | mitmproxy 监听端口 | `8081` |
+| `PENTEST_EVIDENCE_DIR` | 证据（截图/原始包/脚本）落盘根目录，Web 证据路由只读此目录 | `$DSH_HOME/storages/evidence` |
+| `PENTEST_PLAYWRIGHT` / `PENTEST_NODE_PATH` | 显式指定 playwright 路径 / 追加 node_modules 搜索路径 | 自动探测 |
 
 ## 技能库（自进化）
 
