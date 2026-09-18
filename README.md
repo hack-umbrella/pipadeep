@@ -171,3 +171,25 @@ dsh-pentest/                       # bundle 根 = 包 @pipadeep/dsh-pentest
 ## License
 
 MIT，见 [LICENSE](./LICENSE)。记录层 / Web 视图 / sqlite 后端等 vendored 部分的版权归 howmp/dsh-pentest 原作者（MIT）。
+
+
+## dsh 0.1.5 兼容与旧日志修复
+
+dsh 0.1.5 的会话格式迁移（v0→v3）会拒绝旧版插件为驱动父会话投影而注入的合成
+`tool/call` 事件，且迁移拒绝任何非已知 v0 类型的事件。本插件自 **v1.4.0** 起：
+
+- **不再向父会话注入事件**（删除 `appendSubmissionProjection`）；
+- 「渗透」视图数据源改为只读路由 `GET /api/pipadeep-pentest/graph?sessionId=…`
+  （直读 SQLite，形状与会话投影一致，跨 dsh 版本稳定，且含子 agent 提交的全部结果）；
+- 因此 **新会话在 0.1.2 / 0.1.5 上均可用**。
+
+**旧会话**（在 dsh ≤0.1.2 上用旧版插件创建、日志里含合成事件）迁移到 0.1.5 会报错，
+可用修复脚本清除这些事件（会按打包 chunk 行的跨度正确重编号 seq）：
+
+```bash
+node scripts/repair-v0-logs.mjs <session.jsonl.zstd> [more...]
+node scripts/repair-v0-logs.mjs --all "$DSH_HOME/sessions"   # 递归处理全部会话
+node scripts/repair-v0-logs.mjs --dry-run <file>             # 只报告
+```
+- 默认先写 `.bak` 备份；只删 `callId` 以 `pentest-submit-` 开头的合成 `tool/call`。
+- 需要 `zstd` 可执行文件（macOS: `brew install zstd`）。
