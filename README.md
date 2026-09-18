@@ -193,3 +193,23 @@ node scripts/repair-v0-logs.mjs --dry-run <file>             # 只报告
 ```
 - 默认先写 `.bak` 备份；只删 `callId` 以 `pentest-submit-` 开头的合成 `tool/call`。
 - 需要 `zstd` 可执行文件（macOS: `brew install zstd`）。
+
+
+## 资产拓扑图（HTML，自动更新）
+
+每次探测到**新资产**或**新漏洞**时，插件会自动把当前资产拓扑导出成一份自包含的
+交互式 HTML，并覆盖同一个文件（新增即刷新）：
+
+```
+$DSH_HOME/storages/topology/<sessionId>.html
+```
+
+- **布局**：横向树（目标 → 根域 → 子域 → IP/服务/应用/端点），按 `parent` 边成层级；
+  容器原生滚动，几百个资产也看得清。
+- **内容**：节点显示类型 + value + meta，关联漏洞按严重度在节点上标色；点节点看详情
+  （子资产、关联漏洞、标识）。
+- **交互**：搜索过滤、类型图例开关、`▸/▾` 折叠子树、缩放、拖拽平移。离线可用（无 CDN）。
+- **手动刷新 / 取路径**：工具 `pentest_topology`。
+- **Web 查看**：渗透视图标签栏的「拓扑图 ↗」，或直接访问
+  `/api/pipadeep-pentest/topology?sessionId=<会话ID>`。
+- 输出目录可用环境变量 `PENTEST_TOPOLOGY_DIR` 覆盖。
