@@ -9,7 +9,8 @@
   "main": "./lib/index.js",
   "scripts": {
     "test": "node --test test/preset-variants.test.mjs test/lossless-json.test.mjs test/shot-tool.test.mjs",
-    "test:boot": "node test/boot-graph.mjs"
+    "test:boot": "node test/boot-graph.mjs",
+    "check": "node scripts/release-check.mjs"
   },
   "exports": {
     ".": "./lib/index.js",
