@@ -3,7 +3,8 @@
 面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）的渗透测试模式 —— 一个**记录层 + 执行层**合并的自包含插件 bundle：
 
 - **记录层**（来自 [howmp/dsh-pentest](https://github.com/howmp/dsh-pentest)）：把一次授权渗透测试建模成一张**带语义边的探索链路图**（goal → intent → fact → finding + 资产树），并在 Web 中以「探索链路 / 漏洞 / 资产 / 报告」四个视图实时可视化。
-- **执行层**（本项目自研，v0.5 瘦身）：仅 4 个薄工具 —— `pentest_arsenal`（调 arsenal 容器里的 nmap/nuclei/sqlmap/ysuserial/JNDI/内存马等真实武器）/ `pentest_scope`（授权门禁）/ `pentest_bypass`（知识懒加载）/ `pentest_submit_flag`（平台）。由**执行子 agent** 调用，结果经 `pentest_submit` 直写回父 intent。
+- **执行层**（本项目自研）：**5 个薄工具** —— `pentest_arsenal`（调 arsenal 容器里的 nmap/nuclei/sqlmap/ysuserial/JNDI/内存马等真实武器）/ `pentest_scope`（授权范围记录）/ `pentest_bypass`（知识懒加载）/ `pentest_shot`（无头浏览器截图 + 原始包取证）/ `pentest_submit_flag`（平台）。由**执行子 agent** 调用，结果经 `pentest_submit` 直写回父 intent。
+- **证据与交付**：`pentest_evidence_add` 归档任意来源证据；`pentest_topology` 生成资产拓扑 HTML（探到新资产自动更新）；报告嵌入截图与污点路径。
 
 一句话：v0.5 起，记录、执行、可视化形成闭环——记录层管图，执行层不再把武器注册成模型工具，而是由 `pentest_arsenal` 把探测/利用下沉到 arsenal 容器（Kali + JDK8 + 真实武器库）。
 
@@ -22,13 +23,20 @@
 
 从本地 tarball 安装：
 
-```powershell
-dsh plugin --profile web add -w file:C:\path\to\pipadeep-dsh-pentest-0.5.0.tgz
+```bash
+# 从 Release 装（推荐）
+dsh plugin --profile web add https://github.com/hack-umbrella/pipadeep/releases/download/v1.6.1/pipadeep-dsh-pentest-1.6.1.tgz
+# 或装本地 tarball
+dsh plugin --profile web add -w file:/path/to/pipadeep-dsh-pentest-1.6.1.tgz
 ```
 
-> `-w` 是因为 web profile 是 pnpm workspace 根（pnpm 10 需要显式 `--workspace-root`）。
+> `-w` 仅本地 tarball 且 web profile 是 pnpm workspace 根时需要（pnpm 10 要求显式 `--workspace-root`）。
 
 重启 dsh 后，在新会话中选择自动注册的「**渗透模式 Pro**」。
+
+> **dsh 0.1.7+ 有插件安装门禁**：peer 范围必须能覆盖当前 dsh 版本（按 `includePrerelease` 语义判定）。
+> 自 **v1.6.0** 起本插件已把 peer 放宽为 caret，可直接安装；更早版本写的是精确版本，会被拒装
+> （此时只能用 `dsh plugin allow-version … --accept-risk` 绕过，不建议）。
 
 ## 用法
 
@@ -95,11 +103,12 @@ Playwright(本机 Chrome, headless=new)  --proxy-->  mitmproxy :8081  --upstream
 - **自进化**：dsh 的 `skill-filesystem` 扫描以下根目录，且**编辑技能正文无需重启/缓存失效**——
   直接改 `skills/<name>/SKILL.md` 即可被后续目录刷新吸收；**绕过手法**则编辑 `pentest-bypass.json` 即时生效。
 
-**让插件自带的 `skills/` 生效**（任选其一）：
-1. 在 `preset/pentest/agent.cordis.yml` 的 `skill-filesystem` 行加 `config.bundledSkillDir`（或 `customSkillDirs`）指向插件 `skills/` 的绝对路径；或
-2. 把 `skills/*` 目录复制到任一扫描根：`<projectRoot>/.dsh/skills`、`<projectRoot>/.agents/skills`、`~/.dsh/skills`、`~/.agents/skills`。
+**自带 `skills/` 的挂载方式（v1.6.0 起已自动，无需配置）**：`lib/preset-skills.js` 在预设作用域内
+**显式注册**这 5 个技能。原因是 dsh 0.1.7 起预设不再是「目录」，预设内 `skills/` 失去了被发现
+的介质（`$DSH_HOME/.agent-presets` 扫描一并移除）；显式注册在两代 dsh 上行为一致，也不依赖
+安装路径能被猜到。
 
-> 更新技能=改 `SKILL.md` 文件即可（无需重装/重启）。
+> 更新技能=改 `skills/<name>/SKILL.md` 后重启 dsh（显式注册发生在预设挂载时）。
 
 ## 管理（选择 / 添加）
 
@@ -139,7 +148,7 @@ dsh-pentest/                       # bundle 根 = 包 @pipadeep/dsh-pentest
 ├── package.json                   # bundle manifest：dsh.bundle.patch + dsh.client + exports 子路径
 ├── cordis.patch.yml               # 补丁层：UI、sqlite 后端、storage-domain 路由、preset root
 ├── lib/
-│   ├── pentest-tools.js           # ★ 本项目源码：31 个执行工具（可直接改，无构建）
+│   ├── pentest-tools.js           # ★ 本项目源码：5 个薄执行工具（可直接改，无构建）
 │   ├── pentest.js                 # vendored 自 howmp/dsh-pentest：记录层（领域模型/工具/投影/协议）
 │   ├── storage-sqlite.js          # vendored：渗透记录专用 sqlite 后端（node:sqlite）
 │   ├── ui-pentest.js              # vendored：Web 插件宿主半（空 apply）
@@ -173,7 +182,21 @@ dsh-pentest/                       # bundle 根 = 包 @pipadeep/dsh-pentest
 MIT，见 [LICENSE](./LICENSE)。记录层 / Web 视图 / sqlite 后端等 vendored 部分的版权归 howmp/dsh-pentest 原作者（MIT）。
 
 
-## dsh 0.1.5 兼容与旧日志修复
+## dsh 版本兼容（0.1.2 / 0.1.5 / 0.1.7）
+
+同一份包同时支持这三代 dsh。0.1.7 动了三处**会导致硬失败**的地方，v1.6.0 起全部处理：
+
+| 变更 | 症状 | 本插件的处理 |
+| :-- | :-- | :-- |
+| **agentPresets 改成声明式**（`register(definition)`），目录式预设（`<name>/agent.cordis.yml`）被移除 | 「渗透」预设凭空消失 | `lib/preset-root.js` 双分支：新宿主走 `register`，`plugins` 里用 `cordis:include` 指回 composition（那份文件继续当唯一事实源）；0.1.2 仍走 `resolvedRoots` 目录扫描；未知 API 显式抛错 |
+| **`dsh-workflow-worker-thread` 被 `dsh-workflow-ptc` 取代**（0.1.6-alpha.1 起） | 预设里**每一行**都报 `never started`（整份预设激活失败，不是降级） | 两份 composition 变体（`agent.cordis.yml` / `agent.cordis.next.yml`），按宿主能力选择；差异由测试锁死 |
+| **插件安装门禁**：peer 必须覆盖当前 dsh（`includePrerelease` 语义） | `installation rejected: Plugin … is incompatible` | peer 全部放宽为 caret（`^0.1.0-rc.6` 能覆盖 `0.1.7-rc.2`，精确版本不能） |
+
+> 另有两处只有踩过才知道的细节：`cordis:include` 的 `path` **必须是 URL**（传绝对路径字符串会
+> 静默不加载，症状同上「每行 never started」）；预设目录必须在 **profile 的 node_modules 链上**
+> （即作为包安装），否则解析不到 dsh 宿主包（`@deepseek-ai/dsh-tool-*`…），同样每行 never started。
+
+### 0.1.5 的会话格式迁移与旧日志修复
 
 dsh 0.1.5 的会话格式迁移（v0→v3）会拒绝旧版插件为驱动父会话投影而注入的合成
 `tool/call` 事件，且迁移拒绝任何非已知 v0 类型的事件。本插件自 **v1.4.0** 起：
@@ -187,12 +210,14 @@ dsh 0.1.5 的会话格式迁移（v0→v3）会拒绝旧版插件为驱动父会
 可用修复脚本清除这些事件（会按打包 chunk 行的跨度正确重编号 seq）：
 
 ```bash
-node scripts/repair-v0-logs.mjs <session.jsonl.zstd> [more...]
+node scripts/repair-v0-logs.mjs <session.jsonl.zstd | session.v4.jsonl.zstd> [more...]
 node scripts/repair-v0-logs.mjs --all "$DSH_HOME/sessions"   # 递归处理全部会话
 node scripts/repair-v0-logs.mjs --dry-run <file>             # 只报告
 ```
 - 默认先写 `.bak` 备份；只删 `callId` 以 `pentest-submit-` 开头的合成 `tool/call`。
 - 需要 `zstd` 可执行文件（macOS: `brew install zstd`）。
+- 会话日志文件名随 dsh 版本演进：0.1.2 是 `session.jsonl.zstd`，0.1.7 是 `session.v4.jsonl.zstd`
+  （会话格式 v4）；脚本对两者一视同仁。
 
 
 ## 资产拓扑图（HTML，自动更新）
@@ -213,3 +238,16 @@ $DSH_HOME/storages/topology/<sessionId>.html
 - **Web 查看**：渗透视图标签栏的「拓扑图 ↗」，或直接访问
   `/api/pipadeep-pentest/topology?sessionId=<会话ID>`。
 - 输出目录可用环境变量 `PENTEST_TOPOLOGY_DIR` 覆盖。
+
+## 版本变更（近期）
+
+| 版本 | 内容 |
+| :-- | :-- |
+| **v1.6.1** | 文档修正（安装命令、工具数、技能挂载方式、版本兼容章节） |
+| **v1.6.0** | **适配 dsh 0.1.7**：预设声明式注册（双 API 兼容）、显式注册 5 个技能、workflow 双变体、peer 放宽为 caret（过安装门禁） |
+| v1.5.0 | 资产拓扑图 HTML（探到新资产自动生成/更新）+ `pentest_topology` 工具 |
+| v1.4.2 | 修复脚本随包分发（`files` 补 `scripts/`） |
+| v1.4.1 | 旧日志修复脚本 `repair-v0-logs.mjs`（含 packed-chunk 跨度的 seq 重编号） |
+| v1.4.0 | **适配 dsh 0.1.5**：不再向父会话注入事件；「渗透」视图改由存储路由供图 |
+| v1.3.4 | persona 配置双版本兼容（`text` / `prefix`） |
+| v1.3.3 | 彻底零确认：用户即授权方，给出目标即开测 |
