@@ -59,3 +59,23 @@ export 保持一致。
 
 Conventional Commit 风格，如 `feat: add xxx execution tool` / `fix: align sqlite path`。
 涉及 UI 改动附 Web 截图；涉及 vendored 产物重生成时描述重建来源与版本。
+
+## dsh 0.2 换代（2026-10-12，v1.6.4 起）
+
+这条线踩到的三个坑，**沙箱（全新 DSH_HOME）复现不出来**，必须在真实 profile 上验：
+
+1. **dsh 系 peer 必须 `optional`**（`peerDependenciesMeta`）。否则 pnpm 把宿主包装成副本进
+   profile 的 `.pnpm`，预设 composition 的行会解析到旧副本 → dsh 报
+   `reaches an incompatible plugin` 并**禁用整份预设**（工具凭空消失）。
+2. **客户端不能依赖 `sessions.list.getSnapshot().current`** —— 0.2 移除了该字段
+   （`{ids, byId, phase, projectionsBySession}`），会话行也不再带 `agentPreset`。
+   旧写法让「渗透」tab **静默不挂载**（页面零报错、宿主日志零报错）。
+   v1.6.4 起：会话身份取自 slot 的 `inject(sessionId)`；预设判定同时读
+   `row.agentPreset` / `row.projectionValues.agentPreset` / `projectionsBySession[id].values.agentPreset`；
+   无 `current` 时单次注册、组件自门控（非渗透会话显示 `view.notPentest` 提示）。
+3. **自定义 LLM 端点的 `baseURL` 语义变了**：0.2 视其为**根地址**并自行补 `/v1` + `/messages`，
+   0.1.x 惯用的 OpenAI 全路径会拼成 `…/v1/chat/completions/v1` → 401「API 密钥无效」。
+
+发布前的自动拦截：共享的 `scripts/release-check.mjs` 的 2c（peer optional）与
+2d（引用 `snapshot.current` 必须带 `projectionsBySession` 回退）。完整检查单见
+`hack-umbrella/pipacodedeep` 的 `AGENTS.md`（十条硬性规矩）。
