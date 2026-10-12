@@ -80,6 +80,22 @@ for (const line of supportLines) {
 	check(`peer 覆盖 dsh ${line}.x`, covered, "peer 里没有该次版本线 —— 安装门禁会按 includePrerelease 判定为不兼容");
 }
 
+// ── 2c. dsh 系 peer 必须声明为 optional ──────────────────────────────────────
+// 事故：peer 非 optional 时 pnpm 会把 dsh 包装成**副本**进 profile 的 `.pnpm`。
+// 预设 composition 里的行从插件目录向上解析，会落到 pnpm 的 `.pnpm/node_modules`
+// 提升层拿到那些副本；换代 dsh 后副本版本与宿主不匹配 → dsh 判定「composition
+// reaches an incompatible plugin」并**禁用整份预设**（症状：预设里的工具凭空消失，
+// 日志有 `disabling profile plugin row "<name>-composition"`）。
+// 声明 optional 后 pnpm 不装副本，解析落到 profile 的共享层（随 dsh 一起升级）。
+console.log("\n── 2c. dsh 系 peer 应声明 optional（避免 pnpm 装出副本）──");
+const dshPeers = Object.keys(pkg.peerDependencies ?? {}).filter((name) => name.startsWith("@deepseek-ai/"));
+const notOptional = dshPeers.filter((name) => pkg.peerDependenciesMeta?.[name]?.optional !== true);
+check(
+	`dsh 系 peer 全部 optional（共 ${dshPeers.length} 个）`,
+	dshPeers.length > 0 && notOptional.length === 0,
+	notOptional.length === 0 ? "没有 @deepseek-ai/* peer" : `未声明 optional：${notOptional.join(", ")}`,
+);
+
 // ── 3. 客户端 bundle 注册 id === 包名（最容易漏改的一处）────────────────────
 console.log("\n── 3. 客户端 bundle 注册 id ──");
 const packagedFiles = [...new Set((pkg.files ?? []).flatMap((entry) => expand(entry)))];
