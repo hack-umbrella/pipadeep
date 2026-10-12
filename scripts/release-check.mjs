@@ -61,6 +61,25 @@ console.log("\n── 2. peer 范围（安装门禁按 includePrerelease 判定�
 const exactPeers = Object.entries(pkg.peerDependencies ?? {}).filter(([, range]) => !/^[\^~]|^\*$|>/.test(range));
 check("peer 没有精确钉死的版本（须用 ^/~/范围）", exactPeers.length === 0, exactPeers.map(([k, v]) => `${k}@${v}`).join(", "));
 
+// ── 2b. peer 必须覆盖 dsh.support 声明的每条版本线 ────────────────────────────
+// `^0.1.0-rc.6` = `>=0.1.0-rc.6 <0.2.0`，**天然不含 0.2.x** —— 升到 0.2 线时安装门禁
+// 会直接拒装（实测 0.2.1-alpha.2 上 `installation rejected`）。这里按「次版本线」判断，
+// 比解析完整 semver 范围更稳，也正好拦住这类漏改。
+console.log("\n── 2b. peer 覆盖 dsh.support 声明的版本线 ──");
+const supportLines = Array.isArray(pkg.dsh?.support) ? pkg.dsh.support.map(String) : [];
+check("声明了 dsh.support（支持的 dsh 版本线）", supportLines.length > 0, JSON.stringify(supportLines));
+for (const line of supportLines) {
+	const covered = Object.values(pkg.peerDependencies ?? {}).some((range) =>
+		String(range)
+			.split("||")
+			.some((alt) => {
+				const m = /^\s*[\^~]?\s*(\d+)\.(\d+)/.exec(alt);
+				return m !== null && `${m[1]}.${m[2]}` === line;
+			}),
+	);
+	check(`peer 覆盖 dsh ${line}.x`, covered, "peer 里没有该次版本线 —— 安装门禁会按 includePrerelease 判定为不兼容");
+}
+
 // ── 3. 客户端 bundle 注册 id === 包名（最容易漏改的一处）────────────────────
 console.log("\n── 3. 客户端 bundle 注册 id ──");
 const packagedFiles = [...new Set((pkg.files ?? []).flatMap((entry) => expand(entry)))];
