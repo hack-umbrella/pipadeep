@@ -25,9 +25,10 @@
 
 ```bash
 # 从 Release 装（推荐）
-dsh plugin --profile web add https://github.com/hack-umbrella/pipadeep/releases/download/v1.6.1/pipadeep-dsh-pentest-1.6.1.tgz
+# 把 X.Y.Z 换成 releases 页里的最新版本
+dsh plugin --profile web add https://github.com/hack-umbrella/pipadeep/releases/download/vX.Y.Z/pipadeep-dsh-pentest-X.Y.Z.tgz
 # 或装本地 tarball
-dsh plugin --profile web add -w file:/path/to/pipadeep-dsh-pentest-1.6.1.tgz
+dsh plugin --profile web add -w file:/path/to/pipadeep-dsh-pentest-X.Y.Z.tgz
 ```
 
 > `-w` 仅本地 tarball 且 web profile 是 pnpm workspace 根时需要（pnpm 10 要求显式 `--workspace-root`）。
@@ -37,6 +38,34 @@ dsh plugin --profile web add -w file:/path/to/pipadeep-dsh-pentest-1.6.1.tgz
 > **dsh 0.1.7+ 有插件安装门禁**：peer 范围必须能覆盖当前 dsh 版本（按 `includePrerelease` 语义判定）。
 > 自 **v1.6.0** 起本插件已把 peer 放宽为 caret，可直接安装；更早版本写的是精确版本，会被拒装
 > （此时只能用 `dsh plugin allow-version … --accept-risk` 绕过，不建议）。
+
+## dsh 0.2 支持
+
+同一份包同时支持 **0.1.2 / 0.1.5 / 0.1.7 / 0.2.0-rc.2 / 0.2.1-alpha.2**。预设结构没变，0.2 上直接可用，
+但**升级 dsh 后要动的是环境，不是插件**，三件事：
+
+1. **刷新模块拦截层**：`~/.dsh/profiles/node_modules` 是 dsh 把宿主包路由给 profile 里插件的
+   符号链接农场，**一次性生成、`dsh plugin install` 不会刷新**。换代后会出现悬空链接（旧版有、
+   新版删掉的包）与缺失条目（新版新增的包，如 0.2 的 `dsh-workflow-ptc`）→ 症状是整份 composition
+   被禁用或行 `never started`。按全局安装里每个 `@deepseek-ai/*` 重建链接、删掉悬空的即可。
+2. **profile 的 `.npmrc` 加 `auto-install-peers=false`**：pnpm 解析 peer 时不认预发布版，而 dsh
+   全线只有预发布 → 否则干净装依赖会报 `ERR_PNPM_NO_MATCHING_VERSION`。
+3. **第三方插件一起升**：钉在 0.1.x 线的插件（better-sidebar / dshmarket / vision-router）在 0.2 上
+   会被 `skipping profile bundle` 直接跳过。
+
+包自身的两处保证：
+
+- dsh 系 peer 声明为 **`optional`**：否则 pnpm 会把宿主包作为**副本**装进 profile 的 `.pnpm`，
+  而预设 composition 的行从插件目录向上解析会命中副本 → dsh 判定 `reaches an incompatible plugin`
+  并**禁用整份预设**（工具凭空消失）。
+- `release-check` 的 2c/2d 在打包前拦下两类**静默失效**：peer 未 optional；客户端依赖 dsh 0.2
+  已移除的字段（`sessions.list.getSnapshot().current` —— 会让「渗透」tab 永远不挂载且**零报错**）。
+
+> **自建 / 代理 LLM 端点注意**：dsh 0.2 的 deepseek 客户端按 Anthropic Messages 协议拼 URL ——
+> `baseURL` 被当作**根地址**（不以 `/v1` 结尾就补 `/v1`，再拼 `/messages`），并发送
+> `x-api-key` + `anthropic-version`。0.1.x 时代惯用的 OpenAI 全路径
+> （`https://host/v1/chat/completions`）会被拼成 `…/v1/chat/completions/v1` → 401
+> 「API 密钥无效」（**不是 key 的问题**）。写成根地址即可；网关需接受 `x-api-key` 或 Bearer。
 
 ## 用法
 
@@ -243,6 +272,10 @@ $DSH_HOME/storages/topology/<sessionId>.html
 
 | 版本 | 内容 |
 | :-- | :-- |
+| **v1.6.5** | 文档：dsh 0.2 支持、升级注意事项、代理端点 `baseURL` 语义 |
+| **v1.6.4** | **修 dsh 0.2 上「渗透」视图静默不挂载**：0.2 移除了客户端快照的 `current` 字段，改从 slot 的 `inject(sessionId)` 取会话身份 + 读 `projectionsBySession`，非渗透会话显示占位提示 |
+| **v1.6.3** | **修 dsh 0.2 上预设被整份禁用**：dsh 系 peer 全部声明 `optional` |
+| **v1.6.2** | peer 放宽为 `^0.1.0-rc.6 \|\| ^0.2.0-rc.1`（覆盖 0.2 线） |
 | **v1.6.1** | 文档修正（安装命令、工具数、技能挂载方式、版本兼容章节） |
 | **v1.6.0** | **适配 dsh 0.1.7**：预设声明式注册（双 API 兼容）、显式注册 5 个技能、workflow 双变体、peer 放宽为 caret（过安装门禁） |
 | v1.5.0 | 资产拓扑图 HTML（探到新资产自动生成/更新）+ `pentest_topology` 工具 |
