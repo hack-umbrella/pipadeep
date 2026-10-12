@@ -96,6 +96,27 @@ check(
 	notOptional.length === 0 ? "没有 @deepseek-ai/* peer" : `未声明 optional：${notOptional.join(", ")}`,
 );
 
+// ── 2d. 客户端快照字段必须覆盖 dsh 0.2（`current` 已被移除）──────────────────
+// 事故：客户端用 `sessions.list.getSnapshot().current` 判断“当前会话”，dsh 0.2 的
+// 快照改成 {ids, byId, phase, projectionsBySession}（**没有 current**）→ 判定恒为
+// undefined → 按会话注册的视图（如渗透 tab）永远不挂载，且页面零报错、日志零报错，
+// 只有肉眼看 UI 才能发现。凡引用 `snapshot.current` 的客户端必须同时带 0.2 回退。
+console.log("\n── 2d. 客户端快照字段兼容 dsh 0.2 ──");
+const clientFile = pkg.exports?.["./client"]?.default ?? pkg.exports?.["./client"] ?? pkg.client;
+const clientPath = typeof clientFile === "string" ? join(ROOT, clientFile) : undefined;
+if (clientPath === undefined || !existsSync(clientPath)) {
+	console.log("  · 跳过（包未声明客户端 bundle）");
+} else {
+	const bundle = readFileSync(clientPath, "utf8");
+	const usesCurrent = /snapshot\.current|\.current\b/.test(bundle) && /getSnapshot\(\)/.test(bundle);
+	const hasFallback = bundle.includes("projectionsBySession");
+	check(
+		"用到 snapshot.current 时带 0.2 回退（projectionsBySession）",
+		!usesCurrent || hasFallback,
+		!usesCurrent ? "未使用 snapshot.current" : "缺 projectionsBySession 回退：dsh 0.2 上按会话挂载的视图会静默失效",
+	);
+}
+
 // ── 3. 客户端 bundle 注册 id === 包名（最容易漏改的一处）────────────────────
 console.log("\n── 3. 客户端 bundle 注册 id ──");
 const packagedFiles = [...new Set((pkg.files ?? []).flatMap((entry) => expand(entry)))];
