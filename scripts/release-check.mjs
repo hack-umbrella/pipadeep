@@ -11,6 +11,7 @@
  *   4. composition 里出现文件路径（`./plugins/x.mjs` / `/abs/x.mjs`）→ 换机器或换代 dsh 就炸。
  *   5. patch 行的 row 名称映射不到本包 exports → 行加载失败。
  *   6. 机器绝对路径混进发布文件 → 泄漏本机目录结构。
+ *   8. 工具参数 schema 不合法（array 缺 items）→ 插件加载失败、整份预设建不了会话。
  *   7. 打包漏文件（files 字段配错）→ 用户装上后缺预设/技能/脚本；
  *      连带上游：相对 import 的目标没进包 → 插件加载失败（预设整份不可用）。
  *
@@ -209,7 +210,59 @@ check("打包文件里没有 /Users、/home 或 C:\\Users 绝对路径", leaked.
 
 // ── 7. 打包内容完整 ─────────────────────────────────────────────────────────
 if (!NO_PACK) {
-	console.log("\n── 7. npm pack 内容 ──");
+	// ── 6c. 工具参数里的数组必须声明 items ───────────────────────────────────────
+// 事故：新增工具的 `files: { type: "array" }` 没写 items → dsh 报
+// `unsupported JSON schema: schema.type must be …`，**插件加载失败、整份预设建不了会话**，
+// 而这种错误只有在用户建会话时才暴露。这里静态扫源码，打包前就拦下。
+console.log("\n── 6c. 工具 schema：array 必须带 items ──");
+const schemaSources = [];
+for (const dir of ["lib", "preset"]) {
+	const base = join(ROOT, dir);
+	if (!existsSync(base)) continue;
+	for (const entry of readdirSync(base, { recursive: true })) {
+		const file = join(base, String(entry));
+		if (!/\.(m?js|cjs|yml|yaml)$/.test(file)) continue;
+		let stat;
+		try { stat = statSync(file); } catch { continue; }
+		if (stat.isFile()) schemaSources.push(file);
+	}
+}
+const arrayWithoutItems = [];
+/**
+ * 找到 `type: "array"` 之后、**同一个对象字面量内**是否声明了 items。
+ * 直接按窗口长度猜会误报（长 description 之后才有 items，本仓库里就有 4 处），
+ * 所以先把字符串字面量等长屏蔽掉，再按大括号深度扫描。
+ */
+function arrayLacksItems(text) {
+	const arrayAt = [];
+	for (const match of text.matchAll(/type:\s*"array"/g)) arrayAt.push(match.index + match[0].length);
+	if (arrayAt.length === 0) return [];
+	const masked = text.replace(/"(?:[^"\\]|\\.)*"/g, (s) => "\u0000".repeat(s.length));
+	const bad = [];
+	for (const start of arrayAt) {
+		let depth = 0;
+		let found = false;
+		for (let i = start; i < masked.length; i += 1) {
+			const ch = masked[i];
+			if (ch === "{") depth += 1;
+			else if (ch === "}") {
+				if (depth === 0) break;
+				depth -= 1;
+			} else if (depth === 0 && masked.startsWith("items", i)) { found = true; break; }
+		}
+		if (!found) bad.push(start);
+	}
+	return bad;
+}
+for (const file of schemaSources) {
+	const text = readFileSync(file, "utf8");
+	for (const index of arrayLacksItems(text)) {
+		arrayWithoutItems.push(`${relative(ROOT, file)}: 第 ${text.slice(0, index).split("\n").length} 行`);
+	}
+}
+check("array 参数都声明了 items", arrayWithoutItems.length === 0, arrayWithoutItems.slice(0, 5).join("; "));
+
+console.log("\n── 7. npm pack 内容 ──");
 	try {
 		const out = execFileSync("npm", ["pack", "--silent"], { cwd: ROOT, encoding: "utf8" }).trim().split("\n").pop();
 		const list = execFileSync("tar", ["tzf", out], { cwd: ROOT, encoding: "utf8" }).split("\n").filter((line) => line !== "");
