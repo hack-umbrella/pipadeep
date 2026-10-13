@@ -11,7 +11,8 @@
  *   4. composition 里出现文件路径（`./plugins/x.mjs` / `/abs/x.mjs`）→ 换机器或换代 dsh 就炸。
  *   5. patch 行的 row 名称映射不到本包 exports → 行加载失败。
  *   6. 机器绝对路径混进发布文件 → 泄漏本机目录结构。
- *   7. 打包漏文件（files 字段配错）→ 用户装上后缺预设/技能/脚本。
+ *   7. 打包漏文件（files 字段配错）→ 用户装上后缺预设/技能/脚本；
+ *      连带上游：相对 import 的目标没进包 → 插件加载失败（预设整份不可用）。
  *
  * 用法：
  *   node scripts/release-check.mjs            # 静态检查 + npm pack 内容核对
@@ -227,6 +228,20 @@ if (!NO_PACK) {
 		];
 		const missing = [...new Set(required)].filter((needle) => !list.includes(needle));
 		check("tarball 含全部必需文件", missing.length === 0, `缺失：${missing.join(", ")}`);
+
+		// 6b. 相对 import 的目标必须真的在包里。
+		// 事故：files 写了 `lib/**/*.js` 却漏 `lib/**/*.mjs`，而插件 `import "./ingest.mjs"`
+		// 在用户机器上直接加载失败（整个预设不可用）——固定清单式的检查发现不了这种漂移。
+		const packedSet = new Set(list.map((entry) => entry.replace(/^package\//, "")));
+		const missingImports = [];
+		for (const file of [...packedSet].filter((entry) => /\.(m?js|cjs)$/.test(entry))) {
+			const text = readFileSync(join(ROOT, file), "utf8");
+			for (const match of text.matchAll(/(?:from\s*|import\s*\(\s*)["'](\.[^"']+)["']/g)) {
+				const target = relative(ROOT, resolve(dirname(join(ROOT, file)), match[1])).split("\\").join("/");
+				if (!packedSet.has(target)) missingImports.push(`${file} → ${match[1]}`);
+			}
+		}
+		check("相对 import 的目标都随包分发", missingImports.length === 0, [...new Set(missingImports)].slice(0, 6).join("; "));
 		console.log(`      tarball: ${out}（${list.length - 1} 个文件）`);
 	} catch (error) {
 		bad("npm pack 失败", String((error && error.message) || error));
