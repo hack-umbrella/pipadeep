@@ -13,6 +13,7 @@
 | 面 | 内容 |
 |---|---|
 | 记录层 | `pentest` storage-domain（6 表：goals/intents/facts/findings/assets/edges）+ 确定性 id（`<kind>-<n>`）+ 会话投影纯重放 |
+| 输入层 | `pentest_ingest`：把 nmap/nuclei/httpx/ffuf/masscan/naabu 的原始输出**确定性**解析成资产与事实（按稳定键去重、可复现、带来源 sha256），不再让模型手工搬数据 |
 | 执行层 | 4 个薄工具：**arsenal**（调容器武器）/ **scope**（门禁）/ **bypass**（知识懒加载）/ **submit_flag**（平台）。真实武器在 arsenal 容器里（nmap/nuclei/sqlmap/hydra/msfconsole/ysuserial/JNDIExploit/java-chains） |
 | Web 视图 | 探索链路（@xyflow/react 图，边带「意图链/产出/推导自/证实」关系胶囊）、漏洞（严重度/可复现步骤/影响资产）、资产（列表/图）、报告（Markdown 渲染·复制·保存） |
 | 编排 | 指挥官（决策 agent）建 goal/intent，执行子 agent 只被授予 `pentest_submit` + 执行工具，`toolFilter.deny` 禁掉记录与委派工具 |
