@@ -39,6 +39,43 @@ dsh plugin --profile web add -w file:/path/to/pipadeep-dsh-pentest-X.Y.Z.tgz
 > 自 **v1.6.0** 起本插件已把 peer 放宽为 caret，可直接安装；更早版本写的是精确版本，会被拒装
 > （此时只能用 `dsh plugin allow-version … --accept-risk` 绕过，不建议）。
 
+## 旧会话日志修复（v1.6.6）
+
+v1.4.0 之前，为了让 Web 视图显示数据，本插件会往**父会话**追加合成的 `tool/call` 事件
+（`callId: pentest-submit-N`，`turn: 0` + 全局计数器当 `step`）。dsh 0.2 的 v0→v4 会话迁移会
+校验结构，这类事件会让**旧会话直接打不开**：
+
+```
+Session migration from v0 to v4 refuses the transformed artifact:
+tool/call does not match an open turn and step; source v0 artifact remains unchanged
+```
+
+修复（幂等、自动备份）：
+
+```bash
+node scripts/repair-v0-logs.mjs --dry-run --all ~/.dsh/sessions   # 先看有多少要修
+node scripts/repair-v0-logs.mjs           --all ~/.dsh/sessions   # 实修（原文件备份为 <file>.bak）
+```
+
+脚本做四件事：删合成事件；**照着 dsh 迁移器的字段表**重编号全部 seq 引用
+（顶层 `sourceEventSeqs` / `surfaceOp`，以及 `data.sourceEventSeq` / `messageSeqs` /
+`shadowedSeqs` / `shadowedRange` / `headerSeq`）；把指向被删行的引用摘掉或就近夹取；
+修正越界的头部 `seedLength`。写盘前先跑结构自检，不过就不写。
+
+> 两个坑值得记下来（都有回归测试）：**dry-run 的汇总行曾经只在写路径累加、恒为 0**，
+> 被误读成"无需修复"；**v0 的 `surfaceOp` 是事件顶层字段**，只处理 `data.*` 会漏掉。
+
+**修完必须用 dsh 自己复验**（脚本自检只覆盖已知规则，权威是 dsh 的迁移器）：
+
+```bash
+curl -sS -X POST -H 'content-type: application/json' \
+  -d '{"type":"client-request","rpcId":"1","method":"session/page","payload":{"args":{"request":{"address":{"kind":"session","sessionId":"<id>"},"throughSeq":999999,"maxMessages":2}}}}' \
+  http://127.0.0.1:3080/api/session/page
+# 回 ok:true = 真的能加载；回 `past cursor N` 也是成功信号（说明迁移已通过），把 throughSeq 换成 N 再试
+```
+
+实测：33 个受影响会话、4971 条合成事件，**全部恢复**。
+
 ## dsh 0.2 支持
 
 同一份包同时支持 **0.1.2 / 0.1.5 / 0.1.7 / 0.2.0-rc.2 / 0.2.1-alpha.2**。预设结构没变，0.2 上直接可用，

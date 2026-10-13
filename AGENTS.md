@@ -79,3 +79,17 @@ Conventional Commit 风格，如 `feat: add xxx execution tool` / `fix: align sq
 发布前的自动拦截：共享的 `scripts/release-check.mjs` 的 2c（peer optional）与
 2d（引用 `snapshot.current` 必须带 `projectionsBySession` 回退）。完整检查单见
 `hack-umbrella/pipacodedeep` 的 `AGENTS.md`（十条硬性规矩）。
+
+## 旧会话日志修复（v1.6.6）
+
+- **别信"无需修复"的汇总行**：`repair-v0-logs.mjs` 的 dry-run 汇总曾经只在写路径累加、恒为 0，
+  于是 33 个坏会话被当成"没事"，修复从没执行。现在 dry-run 与实写共用计数，且只列需要修的文件。
+- **v0 的 `surfaceOp` 是事件顶层字段**（`{op:"replace",start,end}`），不是 `data.surfaceOp`。
+  只重映射 `data.*` 会漏掉它 → dsh 报 `… surface start targets consumed assistant/chunk`。
+- 需要重映射的 seq 引用字段**照着 dsh 迁移器源码枚举**（v1→v2 的 `remapReferences` /
+  `remapPayloadReferences`），别自己猜：顶层 `sourceEventSeqs`/`surfaceOp`；
+  `data.sourceEventSeq`/`messageSeqs`/`shadowedSeqs`/`shadowedRange`/`headerSeq`。
+  `data.shadowedTokenCount` 是 token 数**不是**序号，通用数值重映射一定会把日志改坏。
+- 头部 `seedLength`（=v1 的 `inheritedEventCount`）必须 ≤ 事件数，删行后要跟着修。
+- **修完必须用 dsh 自己复验**（`session/page` RPC）。脚本自检只覆盖已知规则，
+  自检通过 ≠ 能加载 —— 本次就是自检通过、dsh 仍连报三轮不同错误。
