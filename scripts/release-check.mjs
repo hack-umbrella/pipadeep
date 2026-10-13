@@ -11,7 +11,8 @@
  *   4. composition 里出现文件路径（`./plugins/x.mjs` / `/abs/x.mjs`）→ 换机器或换代 dsh 就炸。
  *   5. patch 行的 row 名称映射不到本包 exports → 行加载失败。
  *   6. 机器绝对路径混进发布文件 → 泄漏本机目录结构。
- *   8. 工具参数 schema 不合法（array 缺 items）→ 插件加载失败、整份预设建不了会话。
+ *   8. 工具 schema 不合法（array 缺 items / output.schema 缺 type+additionalProperties）
+ *      → 插件加载失败、整份预设建不了会话。
  *   7. 打包漏文件（files 字段配错）→ 用户装上后缺预设/技能/脚本；
  *      连带上游：相对 import 的目标没进包 → 插件加载失败（预设整份不可用）。
  *
@@ -261,6 +262,23 @@ for (const file of schemaSources) {
 	}
 }
 check("array 参数都声明了 items", arrayWithoutItems.length === 0, arrayWithoutItems.slice(0, 5).join("; "));
+
+// ── 6e. output.schema 必须声明 type 与 additionalProperties ───────────────────
+// 事故：新工具的 output.schema 漏了 `type: "object"` 与 `additionalProperties`
+// → dsh 报 `unsupported JSON schema: schema.type must be …`，插件加载失败、整份预设建不了会话。
+// （用宿主 defineTool 逐变体压过：补上这两项才通过。）
+console.log("\n── 6e. output.schema 需 type + additionalProperties ──");
+const badOutput = [];
+for (const file of schemaSources.filter((f) => /\.(m?js|cjs)$/.test(f))) {
+	const text = readFileSync(file, "utf8");
+	for (const match of text.matchAll(/output:\s*\{\s*schema:\s*\{/g)) {
+		const window = text.slice(match.index, match.index + 400);
+		if (!/type:\s*["']object["']/.test(window) || !/additionalProperties\s*:/.test(window)) {
+			badOutput.push(`${relative(ROOT, file)}: 第 ${text.slice(0, match.index).split("\n").length} 行`);
+		}
+	}
+}
+check("output.schema 都声明了 type/additionalProperties", badOutput.length === 0, badOutput.slice(0, 4).join("; "));
 
 console.log("\n── 7. npm pack 内容 ──");
 	try {
