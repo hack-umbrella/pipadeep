@@ -17,16 +17,42 @@ const lines = (url) =>
     .split('\n')
     .filter((line) => !/^\s*#/.test(line) && line.trim() !== '')
 
-test('workflow 变体之间只差 workflow provider 两行', () => {
-  const a = lines(main)
-  const b = lines(next)
-  assert.equal(a.length, b.length, '两份文件的行数必须一致')
-  const diffs = a.map((line, index) => (line === b[index] ? null : [index, line, b[index]])).filter(Boolean)
-  assert.equal(diffs.length, 2, `只应有两行差异，实际 ${diffs.length}：${JSON.stringify(diffs)}`)
-  assert.match(diffs[0][1], /workflow-worker-thread/)
-  assert.match(diffs[0][2], /workflow-ptc/)
-  assert.match(diffs[1][1], /dsh-workflow-worker-thread/)
-  assert.match(diffs[1][2], /dsh-workflow-ptc/)
+test('workflow 变体：差异仅限 workflow provider 与子 agent 配置方式', () => {
+	const mainText = readFileSync(main, 'utf8')
+	const nextText = readFileSync(next, 'utf8')
+	// 只看配置本体（注释里会提到已移除的包名，那是说明文字，不算引用）
+	const stripComments = (text) => text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n')
+	const mainBody = stripComments(mainText)
+	const nextBody = stripComments(nextText)
+
+	// 1) workflow provider：旧变体 worker-thread、新变体 ptc（0.1.5 之后 worker-thread 被移除）
+	assert.match(mainBody, /@deepseek-ai\/dsh-workflow-worker-thread/, '旧版变体使用 worker-thread')
+	assert.match(nextBody, /@deepseek-ai\/dsh-workflow-ptc/, '新版变体使用 ptc')
+	assert.doesNotMatch(nextBody, /@deepseek-ai\/dsh-workflow-worker-thread/, '新版变体不得引用已移除的 worker-thread')
+
+	// 2) 子 agent 配置方式：新版必须用 agentPreset，且**不得**出现 persona / toolFilter
+	//    （dsh 0.2.1 的 tool-subagent Config 白名单已移除它们，见到就拒绝整个预设）
+	assert.match(nextBody, /agentPreset: pentest-executor/, '新版变体必须用 agentPreset 指向执行子预设')
+	assert.doesNotMatch(nextBody, /^\s+persona:/m, 'next 变体不得保留 persona')
+	assert.doesNotMatch(nextBody, /^\s+toolFilter:/m, 'next 变体不得保留 toolFilter')
+
+	// 3) 旧版回退仍然保留行内写法（0.1.2~0.1.5 没有 agentPreset 概念）
+	assert.match(mainBody, /^\s+persona:/m, '旧版变体需要保留 persona 供 0.1.x 使用')
+	assert.match(mainBody, /^\s+toolFilter:/m, '旧版变体需要保留 toolFilter 供 0.1.x 使用')
+
+	// 4) 两份变体除上述两类外，entry id 集合应当一致（防止手改主文件忘同步）
+	const ids = (text) => new Set([...text.split('\n')].filter((line) => /^- id: /.test(line) && !/^\s*#/.test(line)).map((line) => line.replace(/^- id: /, '').trim()))
+	const mainIds = ids(mainText)
+	const nextIds = ids(nextText)
+	assert.deepEqual([...nextIds].sort(), [...mainIds].sort(), '两份变体的顶层 entry 集合必须一致')
+})
+
+test('执行子预设：顶层是 entry 数组，且不含记录层与委派工具', () => {
+	const executor = readFileSync(new URL('../preset/pentest/executor.cordis.next.yml', import.meta.url), 'utf8')
+	assert.doesNotMatch(executor, /^plugins:/m, 'composition 顶层必须是 entry 数组，不能套 plugins:')
+	assert.match(executor, /@pipadeep\/dsh-pentest\/pentest-tools/, '执行子 agent 需要执行层工具')
+	assert.doesNotMatch(executor, /name: '@pipadeep\/dsh-pentest\/pentest'$/m, '执行子 agent 不得挂记录层（写入权限归指挥官）')
+	assert.doesNotMatch(executor, /dsh-tool-subagent/, '执行子 agent 不得再委派')
 })
 
 test('主 composition 保持 0.1.5- 可用的 worker-thread', () => {

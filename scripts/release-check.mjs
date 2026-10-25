@@ -178,16 +178,22 @@ const base = compositions.find((rel) => !/\.next\.yml$/.test(rel));
 const next = compositions.find((rel) => /\.next\.yml$/.test(rel));
 check("发现成对的 workflow 变体（agent.cordis.yml + agent.cordis.next.yml）", base !== undefined && next !== undefined, JSON.stringify(compositions));
 if (base !== undefined && next !== undefined) {
-	const strip = (text) => text.split("\n").filter((line) => !/^\s*#/.test(line) && line.trim() !== "");
+	// 变体差异规则会随 dsh 演进，改这里时同步 test/preset-variants.test.mjs：
+	//  - 0.1.5 之后 worker-thread 被 ptc 取代 → provider 行不同；
+	//  - 0.2.1 起 tool-subagent 不再接受 persona/toolFilter → 新版变体改用 agentPreset，
+	//    人设与工具面搬进独立执行子预设；旧版变体保留行内写法供 0.1.x 回退。
+	const strip = (text) => text.split("\n").filter((line) => !/^\s*#/.test(line) && line.trim() !== "").join("\n");
 	const a = strip(readFileSync(join(ROOT, base), "utf8"));
 	const b = strip(readFileSync(join(ROOT, next), "utf8"));
-	const diffs = a.map((line, i) => (line === b[i] ? null : [i, line, b[i]])).filter(Boolean);
-	check("两份变体行数一致", a.length === b.length, `${a.length} vs ${b.length}`);
-	check(
-		"差异恰为 workflow provider 两行",
-		diffs.length === 2 && /worker-thread/.test(diffs[0][1]) && /ptc/.test(diffs[0][2]),
-		JSON.stringify(diffs),
-	);
+	check("旧版变体：worker-thread + 行内 persona/toolFilter（0.1.x 回退）",
+		/@deepseek-ai\/dsh-workflow-worker-thread/.test(a) && /^\s+persona:/m.test(a) && /^\s+toolFilter:/m.test(a));
+	check("新版变体：ptc + agentPreset，且不含 persona/toolFilter（dsh 0.2.1 会拒绝整份预设）",
+		/@deepseek-ai\/dsh-workflow-ptc/.test(b) && /agentPreset:\s+pentest-executor/.test(b)
+			&& !/^\s+persona:/m.test(b) && !/^\s+toolFilter:/m.test(b),
+		"persona/toolFilter 会让 0.2.1 报 persona is no longer supported");
+	const executorPath = join(ROOT, "preset/pentest/executor.cordis.next.yml");
+	check("执行子预设存在且顶层是 entry 数组（不套 plugins:）",
+		existsSync(executorPath) && !/^plugins:/m.test(readFileSync(executorPath, "utf8")));
 	for (const rel of [base, next]) {
 		const text = readFileSync(join(ROOT, rel), "utf8");
 		check(`${rel} 没有相对/绝对文件路径行`, !/^\s*name:\s*['"](?:\.|\/)/m.test(text), "composition 里出现 './…' 或绝对路径");
