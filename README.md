@@ -2,7 +2,7 @@
 
 面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）的渗透测试模式 —— 一个**记录层 + 执行层**合并的自包含插件 bundle：
 
-- **记录层**（来自 [howmp/dsh-pentest](https://github.com/howmp/dsh-pentest)）：把一次授权渗透测试建模成一张**带语义边的探索链路图**（goal → intent → fact → finding + 资产树），并在 Web 中以「探索链路 / 漏洞 / 资产 / 报告」四个视图实时可视化。
+- **记录层**（来自 [howmp/dsh-pentest](https://github.com/howmp/dsh-pentest)）：把一次授权渗透测试建模成一张**带语义边的探索链路图**（goal → intent → fact → finding + 资产树），并在 Web 中以「探索链路 / 漏洞 / 资产 / 报告 / 复测 / 全部任务」视图实时可视化。
 - **执行层**（本项目自研）：**5 个薄工具** —— `pentest_arsenal`（调 arsenal 容器里的 nmap/nuclei/sqlmap/ysuserial/JNDI/内存马等真实武器）/ `pentest_scope`（授权范围记录）/ `pentest_bypass`（知识懒加载）/ `pentest_shot`（无头浏览器截图 + 原始包取证）/ `pentest_submit_flag`（平台）。由**执行子 agent** 调用，结果经 `pentest_submit` 直写回父 intent。
 - **证据与交付**：`pentest_evidence_add` 归档任意来源证据；`pentest_topology` 生成资产拓扑 HTML（探到新资产自动更新）；报告嵌入截图与污点路径。
 
@@ -14,7 +14,7 @@
 |---|---|
 | 记录层 | `pentest` storage-domain（6 表：goals/intents/facts/findings/assets/edges）+ 确定性 id（`<kind>-<n>`）+ 会话投影纯重放 |
 | 输入层 | `pentest_ingest`：把 nmap/nuclei/httpx/ffuf/masscan/naabu 的原始输出**确定性**解析成资产与事实（按稳定键去重、可复现、带来源 sha256），不再让模型手工搬数据 |
-| 分析交付 | `pentest_analyze`：KPI 度量、docx+证据包交付、复测差异、越权归类（IDOR/BOLA）、JS 情报 + crt.sh |
+| 分析交付 | `pentest_analyze`：KPI 度量、docx+证据包交付、越权归类（IDOR/BOLA）、JS 情报 + crt.sh；`pentest_retest`：基线快照 + 复测对比（修复/仍存在/新增/回归）+ Web 复测页 |
 | 回连 | `pentest_oob`：带外回连（local 自建 / interactsh），盲注·盲 SSRF·无回显 RCE·XXE 外带·JNDI 注入的**打中验证**；回连按 id 去重后落成事实，含来源 IP 与原始请求 |
 | 执行层 | 4 个薄工具：**arsenal**（调容器武器）/ **scope**（门禁）/ **bypass**（知识懒加载）/ **submit_flag**（平台）。真实武器在 arsenal 容器里（nmap/nuclei/sqlmap/hydra/msfconsole/ysuserial/JNDIExploit/java-chains） |
 | Web 视图 | 探索链路（@xyflow/react 图，边带「意图链/产出/推导自/证实」关系胶囊）、漏洞（严重度/可复现步骤/影响资产）、资产（列表/图）、报告（Markdown 渲染·复制·保存） |
@@ -121,7 +121,7 @@ curl -sS -X POST -H 'content-type: application/json' \
 - **记录工具**（9 个）：`pentest_submit` / `pentest_add_goal` / `pentest_add_intent` / `pentest_add_fact` / `pentest_add_finding` / `pentest_add_asset` / `pentest_state` / `pentest_graph` / `pentest_report`。
 - **执行工具**（5 个，`lib/pentest-tools.js`）：`pentest_arsenal` 等价 `docker exec arsenal arsenal <tool> <args>`（需 dsh 宿主可访问 docker）；`pentest_scope` 读 `PENTEST_SCOPE`；`pentest_bypass` 读 `PENTEST_BYPASS_FILE`。
 - **协议**：`pentest:protocol` 系统提示段（指挥官沿链路推进、子 agent 经 `pentest_submit` 直写父 intent、与用户交互一律中文）+ `tool:pentest-tools` 速查段（SQLi/LFI/命令注入/上传绕过/Python 沙箱逃逸/flag 位置）。
-- **Web 视图**（`lib/ui-pentest.client.js`，vendored）：按会话注册（当前会话或祖先链含 `pentest` 预设才显示，非渗透会话隐藏）；四个子标签。v1.0 起 `cordis.patch.yml` 里 `ui-pentest` 行改用**裸包名** `@pipadeep/dsh-pentest` 注册，客户端模块才会被 dsh 的 client-modules 扫描器发现并注入 boot graph（此前子路径名被 `exactPackageSpecifier` 拒绝、UI 静默缺失）；浏览器半注册 id 亦改为裸包名保持一致。
+- **Web 视图**（`lib/ui-pentest.client.js`，vendored）：按会话注册（当前会话或祖先链含 `pentest` 预设才显示，非渗透会话隐藏）；子标签含探索链路/漏洞/资产/报告/复测/全部任务。v1.0 起 `cordis.patch.yml` 里 `ui-pentest` 行改用**裸包名** `@pipadeep/dsh-pentest` 注册，客户端模块才会被 dsh 的 client-modules 扫描器发现并注入 boot graph（此前子路径名被 `exactPackageSpecifier` 拒绝、UI 静默缺失）；浏览器半注册 id 亦改为裸包名保持一致。
 
 ## 执行层增强（本仓库增量）
 
@@ -149,6 +149,19 @@ Playwright(本机 Chrome, headless=new)  --proxy-->  mitmproxy :8081  --upstream
 - **报告绑定 HTTP 流量（v2.0.4）**：finding 的 `evidence` 中每个 `kind:http` 原始包会在 `pentest_report` 中逐条内联——列出请求方法/URL/状态码/耗时、关键请求与响应头、请求体与响应体（Cookie/Authorization/Set-Cookie 等敏感头自动脱敏，正文超 4KB 截断并指向原始文件）。因此**提交 finding 必须附带 HTTP 证据**（`pentest_shot` 的 evidence 原样传，或外部抓包经 `pentest_evidence_add` 以 `kind:'http'` 归档）；没有原始 HTTP 流量的观察只能作为 fact，报告复现过程也会标注「未记录复现步骤」。复现步骤要求按顺序编号、每步写清具体请求/命令、目标 URL 与预期结果。
 - **CA**：默认 `ignoreHTTPSErrors`（多层 TLS 直放，渗透场景可接受）；需严格校验时把 mitmproxy CA 装进专用 Chrome profile。
 - **前提**：`npm i -g playwright`（+ 本机 Chrome）与 `brew install mitmproxy`；缺失时工具返回明确报错。
+
+## 复测 / 回归（v2.1.0）
+
+客户修完后复测，结论不是「又扫一遍」，而是逐条给出**已修复 / 仍存在 / 新发现 / 回归**。
+
+- **存基线**：首轮渗透收尾时指挥官调用 `pentest_retest action=save name=round1`，把当前 findings + 资产存成基线
+  （`$DSH_HOME/storages/baselines/<target>/<name>.json`）。对齐键 = 规则族 + 资产实际值/URL，
+  **不依赖会话内从 1 重新计数的 asset id**，因此新一轮会话仍能正确对上同一漏洞。
+- **复测**：新一轮会话拿到结果后调用 `pentest_retest action=compare name=round1`，输出逐条差异报告
+  （含复现步骤与 HTTP 证据引用）；`action=list` 列出该目标全部基线。
+- **Web 复测页**：「渗透」面板新增「复测」Tab，自动读取当前会话与基线对比，分组展示四类结论；
+  「查看完整复测报告」打开只读路由 `/api/pipadeep-pentest/retest.md?sessionId=…`。
+- 旧的 `pentest_analyze action=retest`（传入 `previousPath`）仍保留，用于临时对比任意评估 JSON。
 
 ## 可配置环境变量
 
@@ -222,7 +235,7 @@ dsh-pentest/                       # bundle 根 = 包 @pipadeep/dsh-pentest
 │   ├── pentest.js                 # vendored 自 howmp/dsh-pentest：记录层（领域模型/工具/投影/协议）
 │   ├── storage-sqlite.js          # vendored：渗透记录专用 sqlite 后端（node:sqlite）
 │   ├── ui-pentest.js              # vendored：Web 插件宿主半（空 apply）
-│   ├── ui-pentest.client.js       # vendored：Web 插件浏览器半（4 个子标签，@xyflow/react 内联）
+│   ├── ui-pentest.client.js       # Web 插件浏览器半（含 v2.1.0 新增复测 Tab，@xyflow/react 内联）
 │   ├── preset-root.js             # vendored：注册包内只读预设目录
 │   ├── index.js                   # vendored：包入口（空 apply）
 │   └── invariant.js               # vendored：探索图不变量伴生（生产环境不加载）
@@ -313,6 +326,7 @@ $DSH_HOME/storages/topology/<sessionId>.html
 
 | 版本 | 内容 |
 | :-- | :-- |
+| **v2.1.0** | **完整复测工作流**：新增 `pentest_retest`（save/compare/list 基线快照，稳定对齐键=规则+资产实际值，不依赖会话内 asset id）；Web「渗透」面板新增「复测」Tab 展示修复/仍存在/新增/回归（含复现步骤与 HTTP 证据）+ 完整 Markdown 报告路由 |
 | **v2.0.4** | **报告质量：每个漏洞绑定原始 HTTP 流量**——`buildReport` 把 finding 的 `kind:http` 证据逐条内联（方法/URL/状态码/关键头/正文，敏感头脱敏、正文截断），复现过程改为带预期结果的编号步骤；截图改走只读证据路由；指挥官/执行子 agent 提示与报告/利用技能强制「HTTP 证据+清晰复现步骤」 |
 | **v1.6.5** | 文档：dsh 0.2 支持、升级注意事项、代理端点 `baseURL` 语义 |
 | **v1.6.4** | **修 dsh 0.2 上「渗透」视图静默不挂载**：0.2 移除了客户端快照的 `current` 字段，改从 slot 的 `inject(sessionId)` 取会话身份 + 读 `projectionsBySession`，非渗透会话显示占位提示 |
