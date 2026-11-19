@@ -145,7 +145,8 @@ Playwright(本机 Chrome, headless=new)  --proxy-->  mitmproxy :8081  --upstream
 - **工具**：`pentest_shot({ url, findingId?, label?, steps?, fullPage?, headers?, cookies?, proxy? })`；`steps` 支持 `goto/fill/click/press/waitForSelector/wait/screenshot/hover/select/evaluate`。
 - **产出**：`$DSH_HOME/storages/evidence/<findingId>/….png | .http | .shot.mjs`，`evidence` 数组回传后写进 finding。
 - **代理链**：工具自动拉起 mitmproxy（`lib/mitm-addon.py` 按证据头索引原始包），上游默认转发 Burp（`PENTEST_SHOT_UPSTREAM` 可改 / 置空直连）；已在跑则不重复启动。
-- **Web 证据**：漏洞 tab 直接显示截图缩略图（经只读路由 `/api/pipadeep-pentest/evidence?path=…`，限证据目录内）；报告 Markdown 嵌入 `![](path)`。
+- **Web 证据**：漏洞 tab 直接显示截图缩略图（经只读路由 `/api/pipadeep-pentest/evidence?path=…`，限证据目录内）；报告里的截图也走该路由。
+- **报告绑定 HTTP 流量（v2.0.4）**：finding 的 `evidence` 中每个 `kind:http` 原始包会在 `pentest_report` 中逐条内联——列出请求方法/URL/状态码/耗时、关键请求与响应头、请求体与响应体（Cookie/Authorization/Set-Cookie 等敏感头自动脱敏，正文超 4KB 截断并指向原始文件）。因此**提交 finding 必须附带 HTTP 证据**（`pentest_shot` 的 evidence 原样传，或外部抓包经 `pentest_evidence_add` 以 `kind:'http'` 归档）；没有原始 HTTP 流量的观察只能作为 fact，报告复现过程也会标注「未记录复现步骤」。复现步骤要求按顺序编号、每步写清具体请求/命令、目标 URL 与预期结果。
 - **CA**：默认 `ignoreHTTPSErrors`（多层 TLS 直放，渗透场景可接受）；需严格校验时把 mitmproxy CA 装进专用 Chrome profile。
 - **前提**：`npm i -g playwright`（+ 本机 Chrome）与 `brew install mitmproxy`；缺失时工具返回明确报错。
 
@@ -312,6 +313,7 @@ $DSH_HOME/storages/topology/<sessionId>.html
 
 | 版本 | 内容 |
 | :-- | :-- |
+| **v2.0.4** | **报告质量：每个漏洞绑定原始 HTTP 流量**——`buildReport` 把 finding 的 `kind:http` 证据逐条内联（方法/URL/状态码/关键头/正文，敏感头脱敏、正文截断），复现过程改为带预期结果的编号步骤；截图改走只读证据路由；指挥官/执行子 agent 提示与报告/利用技能强制「HTTP 证据+清晰复现步骤」 |
 | **v1.6.5** | 文档：dsh 0.2 支持、升级注意事项、代理端点 `baseURL` 语义 |
 | **v1.6.4** | **修 dsh 0.2 上「渗透」视图静默不挂载**：0.2 移除了客户端快照的 `current` 字段，改从 slot 的 `inject(sessionId)` 取会话身份 + 读 `projectionsBySession`，非渗透会话显示占位提示 |
 | **v1.6.3** | **修 dsh 0.2 上预设被整份禁用**：dsh 系 peer 全部声明 `optional` |
