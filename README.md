@@ -22,25 +22,164 @@
 | 持久化 | 仅 `pentest` 域路由到 sqlite（`$DSH_HOME/storages/pentest-sessions.db`），宿主其它域仍走默认 json 后端 |
 | 授权 | `pentest_add_goal` 的 `authorization` 参数记录授权说明（审计事实，非门禁；扫描/利用仍受部署沙箱与审批约束） |
 
-## 安装
+## 部署手册
 
-从本地 tarball 安装：
+> 把 `X.Y.Z` 替换成 [Releases](https://github.com/hack-umbrella/pipadeep/releases) 里的最新版本（当前 `2.2.2`）。
+
+### 0. 前置检查
 
 ```bash
-# 从 Release 装（推荐）
-# 把 X.Y.Z 换成 releases 页里的最新版本
-dsh plugin --profile web add https://github.com/hack-umbrella/pipadeep/releases/download/vX.Y.Z/pipadeep-dsh-pentest-X.Y.Z.tgz
-# 或装本地 tarball
-dsh plugin --profile web add -w file:/path/to/pipadeep-dsh-pentest-X.Y.Z.tgz
+dsh --version          # 需要 0.1.7+；0.2.x 全系已验证（推荐 0.2.2+）
+node -v                # 22.19+ 或 24+
+pnpm -v                # 10.x（dsh plugin 内部转发给 pnpm）
 ```
 
-> `-w` 仅本地 tarball 且 web profile 是 pnpm workspace 根时需要（pnpm 10 要求显式 `--workspace-root`）。
+本插件**没有构建步骤、没有原生依赖**，装完即可用。截图证据链是可选能力，需要时再装：
 
-重启 dsh 后，在新会话中选择自动注册的「**渗透模式 Pro**」。
+```bash
+npm i -g playwright && npx playwright install chrome   # pentest_shot 截图
+brew install mitmproxy                                  # 原始请求/响应取证
+```
 
-> **dsh 0.1.7+ 有插件安装门禁**：peer 范围必须能覆盖当前 dsh 版本（按 `includePrerelease` 语义判定）。
-> 自 **v1.6.0** 起本插件已把 peer 放宽为 caret，可直接安装；更早版本写的是精确版本，会被拒装
-> （此时只能用 `dsh plugin allow-version … --accept-risk` 绕过，不建议）。
+### 1. 安装
+
+**方式 A：从 Release 直接装（推荐）**
+
+```bash
+# 1) 下载 tarball
+mkdir -p ~/.dsh/pkgs
+gh release download vX.Y.Z --repo hack-umbrella/pipadeep -p '*.tgz' -D ~/.dsh/pkgs
+
+# 2) 装进目标 profile（web 是 dsh web 的默认 profile）
+dsh plugin --profile web add -w file:$HOME/.dsh/pkgs/pipadeep-dsh-pentest-X.Y.Z.tgz
+```
+
+**方式 B：直接给 URL**
+
+```bash
+dsh plugin --profile web add \
+  https://github.com/hack-umbrella/pipadeep/releases/download/vX.Y.Z/pipadeep-dsh-pentest-X.Y.Z.tgz
+```
+
+> `-w`（`--workspace-root`）在本机 `file:` tarball + profile 是 pnpm workspace 根时需要。
+> dsh 0.2.x 的 pnpm 10 会强制要求它，缺了会报 workspace 相关错误。
+
+**装到哪个 profile？**
+
+| 你要用的入口 | profile |
+| :-- | :-- |
+| `dsh web`（浏览器 GUI） | `web` |
+| DeepSeek Harness **桌面 App** | `desktop` ⚠️ 由 App 托管，见下方 §5 |
+| 自己新建的 profile | 换成对应名字 |
+
+### 2. 验证安装
+
+```bash
+# 版本
+node -p "require(process.env.HOME + '/.dsh/profiles/web/node_modules/@pipadeep/dsh-pentest/package.json').version"
+
+# 组合树里能看到 4 行（ui-pentest / storage-sqlite / pentest-preset-root / pentest-routes）
+dsh --profile web --dump-config | grep -iE "pentest"
+```
+
+期望看到：
+
+```
+- id: ui-pentest            name: '@pipadeep/dsh-pentest'
+- id: storage-sqlite        name: '@pipadeep/dsh-pentest/storage-sqlite'
+- id: pentest-preset-root   name: '@pipadeep/dsh-pentest/preset-root'
+- id: pentest-routes        name: '@pipadeep/dsh-pentest/engagements-routes'
+```
+
+### 3. 启用
+
+**重启 dsh**（或桌面 App），然后**新建会话**，在预设选择器里选「**渗透模式 Pro**」。
+
+> ⚠️ 预设只决定**新会话**的组合；已开的会话不会变。切完预设要新开一个会话才会出现「渗透」面板。
+
+### 4. 升级
+
+pnpm 按 `file:` 路径解析，**必须先 remove 再 add**，否则版本不会更新：
+
+```bash
+dsh plugin --profile web remove -w @pipadeep/dsh-pentest
+dsh plugin --profile web add   -w file:$HOME/.dsh/pkgs/pipadeep-dsh-pentest-X.Y.Z.tgz
+# 重启 dsh
+```
+
+升级后检查两处：
+- `package.json` 里 `@pipadeep/dsh-pentest` 的 `file:` 指向新 tarball
+- 重启后预设选择器里「渗透模式 Pro」**没有**显示「加载失败」徽章
+
+### 5. 桌面 App（`desktop` profile）特殊说明
+
+桌面 App 的 profile 由 Electron 托管，CLI 会明确拒绝：
+
+```
+error: profile "desktop" is managed exclusively by the Electron application
+```
+
+此时**不要**手工改 profile 目录。优先用 App 内的**插件管理**界面安装/升级。
+若必须在命令行操作，等价于下面三步（先备份）：
+
+```bash
+# 1) 备份
+cp -R ~/.dsh/profiles/desktop/node_modules/@pipadeep/dsh-pentest \
+      ~/.dsh/pkgs/backup-dsh-pentest-$(date +%Y%m%d)
+cp ~/.dsh/profiles/desktop/package.json ~/.dsh/profiles/desktop/package.json.bak
+
+# 2) 替换包内容（lib / preset / skills / package.json）
+STAGE=$(mktemp -d) && tar xzf ~/.dsh/pkgs/pipadeep-dsh-pentest-X.Y.Z.tgz -C "$STAGE"
+PKG=~/.dsh/profiles/desktop/node_modules/@pipadeep/dsh-pentest
+rm -rf "$PKG"/lib "$PKG"/preset "$PKG"/skills
+cp -R "$STAGE"/package/lib "$STAGE"/package/preset "$STAGE"/package/skills "$PKG"/
+cp "$STAGE"/package/package.json "$PKG"/package.json
+
+# 3) 清单指向新 tarball
+#    把 dependencies["@pipadeep/dsh-pentest"] 改成 file:/Users/<you>/.dsh/pkgs/pipadeep-dsh-pentest-X.Y.Z.tgz
+```
+
+改完**完全退出并重开 App**。
+
+### 6. 回滚 / 卸载
+
+```bash
+# 回滚到上一个版本：remove 当前，add 旧 tarball
+dsh plugin --profile web remove -w @pipadeep/dsh-pentest
+dsh plugin --profile web add   -w file:$HOME/.dsh/pkgs/pipadeep-dsh-pentest-<旧版本>.tgz
+
+# 桌面 App：把 §5 第 1 步的备份拷回包目录、清单指回旧 tarball，重启
+```
+
+完全卸载：
+
+```bash
+dsh plugin --profile web remove -w @pipadeep/dsh-pentest
+```
+
+数据不会随插件删除（仍保留，便于复装后继续用）：
+- `~/.dsh/storages/pentest-sessions.db`（渗透记录）
+- `~/.dsh/storages/baselines/`（复测基线 + 规格）
+- `~/.dsh/storages/evidence/`（截图 / 原始包）
+
+### 7. 故障排查
+
+| 现象 | 原因 | 处理 |
+| :-- | :-- | :-- |
+| 装的时候报 **plugin is incompatible** | peer 版本范围没覆盖当前 dsh | 升级到 ≥ v1.6.0（peer 已放宽为 caret） |
+| 装的时候报 **workspace 相关错误** | 缺 `-w` | 命令加 `-w` |
+| 预设选择器里**没有「渗透模式 Pro」** | ① 没重启；② profile 装错；③ 预设被判 `broken`（broken 的会被选择器过滤） | 重启 → 核对 profile → 看 dsh 日志里 `agent preset pentest:` 一行 |
+| 预设显示「**加载失败**」徽章 | 预设激活抛错（通常是引用了宿主机上不存在的包） | 看 stderr 的 `agent preset pentest:` 详情；对照见下 |
+| 「渗透」面板**不显示** | 当前会话不是渗透预设 | 新建会话并选「渗透模式 Pro」（旧会话不会变） |
+| 复测页一直显示「**需人工确认**」 | 没配判定规格（不会发请求，属预期行为） | `pentest_retest action=spec-scaffold` 生成规格，填好 URL 与特征 |
+| `pentest_shot` 报 **mitmdump 未安装** | 缺 mitmproxy | `brew install mitmproxy` |
+| `pentest_shot` 报 **playwright 相关错误** | 缺 playwright / Chrome | `npm i -g playwright && npx playwright install chrome` |
+
+> **排查预设问题**：`dsh --profile web --dump-config > /dev/null` 会把组合期错误打到 stderr，
+> 含 `disabling profile plugin …` 与 `agent preset <id>: <原因>`。
+
+> **dsh 0.1.7+ 安装门禁**：peer 范围必须能覆盖当前 dsh（按 `includePrerelease` 判定）。
+> 自 v1.6.0 起 peer 已放宽为 caret，可直接装；更早版本写的是精确版本会被拒装。
 
 ## 旧会话日志修复（v1.6.6）
 
@@ -106,6 +245,47 @@ curl -sS -X POST -H 'content-type: application/json' \
 > `x-api-key` + `anthropic-version`。0.1.x 时代惯用的 OpenAI 全路径
 > （`https://host/v1/chat/completions`）会被拼成 `…/v1/chat/completions/v1` → 401
 > 「API 密钥无效」（**不是 key 的问题**）。写成根地址即可；网关需接受 `x-api-key` 或 Bearer。
+
+## 效果图
+
+> 截图来自真实使用：桌面 App（dsh 0.2.2）+ 本插件 v2.2.1，授权目标为演示环境。
+> 图片存放在 [`docs/screenshots/`](docs/screenshots/)。
+
+### 探索链路
+
+goal → intent → fact → finding 的完整链路，边带「意图链 / 产出 / 推导自 / 证实」语义胶囊。
+
+![探索链路](docs/screenshots/01-explore.png)
+
+### 漏洞列表与详情
+
+按严重度排序；每条含影响的资产、可复现步骤，以及绑定到该漏洞的原始 HTTP 流量。
+
+![漏洞列表](docs/screenshots/02-findings.png)
+
+### 报告（含 HTTP 流量证据）
+
+每个漏洞内联请求/响应（方法 / URL / 状态码 / 关键头 / 正文），敏感头自动脱敏，可一键导出 `.md`。
+
+![报告](docs/screenshots/03-report.png)
+
+### 复测对比
+
+上轮基线 vs 本轮现状：已修复 / 仍存在 / 新发现 / 回归，逐条列出。
+
+![复测](docs/screenshots/04-retest.png)
+
+### 资产与拓扑
+
+资产树（域名 → 子域 → IP → 服务 → 接口），可打开交互式拓扑图。
+
+![资产](docs/screenshots/05-assets.png)
+
+<!--
+图片占位：docs/screenshots/ 里放入以下文件后本节即生效（见该目录 README.md 的清单）：
+  01-explore.png  02-findings.png  03-report.png  04-retest.png  05-assets.png
+在图片就位前，GitHub 会显示破图；如希望暂时不显示，把上面的 ![...](...) 行用注释包起来。
+-->
 
 ## 用法
 
@@ -350,6 +530,7 @@ $DSH_HOME/storages/topology/<sessionId>.html
 
 | 版本 | 内容 |
 | :-- | :-- |
+| **v2.2.2** | **文档**：README 增补完整部署手册（前置检查 / 安装 / 验证 / 启用 / 升级 / 桌面 App 特殊处理 / 回滚卸载 / 故障排查），新增「效果图」章节与 `docs/screenshots/` 放图说明 |
 | **v2.2.1** | **让「一键复测」真正可用**：v2.2.0 的 reprobe 引擎只有 `options.specs` 一个注入通道，而 Web 路由由浏览器触发、没人传 specs，引擎内置规格又是空的 —— 一键复测永远返回「需人工复测」且发 0 个请求。现在自动从**基线同目录的 `reprobe-specs.mjs`** 加载判定规格，新增声明式 `expect`（`status`/`bodyIncludes`/`bodyExcludes`，多数场景不必写 JS），新增 `pentest_retest action=spec-scaffold` 一键生成骨架，页面在未配置规格时给出可操作提示；规格文件 mtime 参与缓存失效判定 |
 | **v2.1.1** | **修 dsh 0.2.2 上预设被判 broken（Web 选择器看不到「渗透模式 Pro」）**：移除 0.2.2 已不存在的 `tool-subagent-control/list-agents` 子路径行；补 `fs-search.sampleOverCapGlobResults`（0.2.2 起 required）；给执行子预设的 compaction group 补 `isolate` realm；执行子 agent 人设从无效的 `agent-instructions.text` 改到 `dsh-persona.prefix`（此前从未生效）；清理 0.1.x 死键 `backgroundMode`/`enableRunInBackground`；新增 `scripts/audit-preset-keys.mjs` 并纳入发版门禁 |
 | **v2.1.0** | **完整复测工作流**：新增 `pentest_retest`（save/compare/list 基线快照，稳定对齐键=规则+资产实际值，不依赖会话内 asset id）；Web「渗透」面板新增「复测」Tab 展示修复/仍存在/新增/回归（含复现步骤与 HTTP 证据）+ 完整 Markdown 报告路由 |
