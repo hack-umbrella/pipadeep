@@ -87,7 +87,9 @@ test('源码契约：Web 面板注册复测 Tab、路由与文案', () => {
 	assert.match(bundle, /"retest"/)
 	assert.match(bundle, /view\.tab\.retest/)
 	assert.match(bundle, /function RetestView/)
-	assert.match(bundle, /tab === "retest"/)
+	// v2.2: 复测并入漏洞页子页签（PtRetestPanel），单条复测走 /retest/one
+	assert.match(bundle, /pentest-retest-one/)
+	assert.match(bundle, /\/api\/pipadeep-pentest\/retest\/one\?sessionId=/)
 	assert.match(bundle, /\/api\/pipadeep-pentest\/retest\?sessionId=/)
 	const routes = readFileSync(join(root, 'lib', 'engagements-routes.js'), 'utf8')
 	assert.match(routes, /POINT \+ "\/retest"/)
