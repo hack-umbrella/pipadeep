@@ -530,6 +530,7 @@ $DSH_HOME/storages/topology/<sessionId>.html
 
 | 版本 | 内容 |
 | :-- | :-- |
+| **v2.2.3** | **修探索链路 / 资产图布局塌成细长两列**：节点原按「层 = 一列」单列排列，6 intents/37 facts/11 findings 的会话包围盒高达 4376px，而 ReactFlow 默认 `minZoom: 0.5` 把 `fitView` 需要的 0.14 强行放大 → 节点挤成两根竖条、左侧大片空白。改为**每列最多 8 行折列**（整体接近方阵）并把 `minZoom` 放宽到 0.15；实测同会话包围盒 4376→1184 高、横向利用率 48%→95% |
 | **v2.2.2** | **文档**：README 增补完整部署手册（前置检查 / 安装 / 验证 / 启用 / 升级 / 桌面 App 特殊处理 / 回滚卸载 / 故障排查），新增「效果图」章节与 `docs/screenshots/` 放图说明 |
 | **v2.2.1** | **让「一键复测」真正可用**：v2.2.0 的 reprobe 引擎只有 `options.specs` 一个注入通道，而 Web 路由由浏览器触发、没人传 specs，引擎内置规格又是空的 —— 一键复测永远返回「需人工复测」且发 0 个请求。现在自动从**基线同目录的 `reprobe-specs.mjs`** 加载判定规格，新增声明式 `expect`（`status`/`bodyIncludes`/`bodyExcludes`，多数场景不必写 JS），新增 `pentest_retest action=spec-scaffold` 一键生成骨架，页面在未配置规格时给出可操作提示；规格文件 mtime 参与缓存失效判定 |
 | **v2.1.1** | **修 dsh 0.2.2 上预设被判 broken（Web 选择器看不到「渗透模式 Pro」）**：移除 0.2.2 已不存在的 `tool-subagent-control/list-agents` 子路径行；补 `fs-search.sampleOverCapGlobResults`（0.2.2 起 required）；给执行子预设的 compaction group 补 `isolate` realm；执行子 agent 人设从无效的 `agent-instructions.text` 改到 `dsh-persona.prefix`（此前从未生效）；清理 0.1.x 死键 `backgroundMode`/`enableRunInBackground`；新增 `scripts/audit-preset-keys.mjs` 并纳入发版门禁 |
