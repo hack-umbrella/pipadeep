@@ -326,6 +326,7 @@ $DSH_HOME/storages/topology/<sessionId>.html
 
 | 版本 | 内容 |
 | :-- | :-- |
+| **v2.1.1** | **修 dsh 0.2.2 上预设被判 broken（Web 选择器看不到「渗透模式 Pro」）**：移除 0.2.2 已不存在的 `tool-subagent-control/list-agents` 子路径行；补 `fs-search.sampleOverCapGlobResults`（0.2.2 起 required）；给执行子预设的 compaction group 补 `isolate` realm；执行子 agent 人设从无效的 `agent-instructions.text` 改到 `dsh-persona.prefix`（此前从未生效）；清理 0.1.x 死键 `backgroundMode`/`enableRunInBackground`；新增 `scripts/audit-preset-keys.mjs` 并纳入发版门禁 |
 | **v2.1.0** | **完整复测工作流**：新增 `pentest_retest`（save/compare/list 基线快照，稳定对齐键=规则+资产实际值，不依赖会话内 asset id）；Web「渗透」面板新增「复测」Tab 展示修复/仍存在/新增/回归（含复现步骤与 HTTP 证据）+ 完整 Markdown 报告路由 |
 | **v2.0.4** | **报告质量：每个漏洞绑定原始 HTTP 流量**——`buildReport` 把 finding 的 `kind:http` 证据逐条内联（方法/URL/状态码/关键头/正文，敏感头脱敏、正文截断），复现过程改为带预期结果的编号步骤；截图改走只读证据路由；指挥官/执行子 agent 提示与报告/利用技能强制「HTTP 证据+清晰复现步骤」 |
 | **v1.6.5** | 文档：dsh 0.2 支持、升级注意事项、代理端点 `baseURL` 语义 |

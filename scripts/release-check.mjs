@@ -202,6 +202,36 @@ if (base !== undefined && next !== undefined) {
 const presetYmls = packagedFiles.filter((file) => /\/preset\.yml$/.test(file));
 check("预设目录带 preset.yml", presetYmls.length > 0, JSON.stringify(presetYmls.map((f) => relative(ROOT, f))));
 
+// ── 5b. 预设配置键与宿主 schema 对照 ────────────────────────────────────────
+// schemastery 对未知键静默保留、绝不报错：写错键只会让配置悄悄不生效。
+// 真实事故：`dsh-agent-instructions` 没有 `text` 字段（执行子 agent 的人设因此从未生效）、
+// `dsh-tool-subagent` 的 `backgroundMode`/`enableRunInBackground` 是 0.1.x 死键。
+// 这一步把 `node scripts/audit-preset-keys.mjs` 的结果纳入发版门禁。
+console.log("\n── 5b. 预设配置键 vs 宿主 schema ──");
+{
+	const audit = join(ROOT, "scripts/audit-preset-keys.mjs");
+	if (!existsSync(audit)) {
+		check("预设键审计脚本存在", false, "缺少 scripts/audit-preset-keys.mjs");
+	} else {
+		const install = process.env.DSH_INSTALL_DIR;
+		if (install === undefined || !existsSync(install)) {
+			console.log("  ~ 跳过：没有 DSH_INSTALL_DIR（沙箱/无 dsh 环境下无法对照宿主 schema）");
+		} else {
+			try {
+				const out = execFileSync(process.execPath, [audit], {
+					cwd: ROOT,
+					encoding: "utf8",
+					env: { ...process.env, DSH_INSTALL_DIR: install },
+				});
+				const summary = out.trim().split("\n").filter((line) => line.startsWith("✓") || line.startsWith("✗")).pop();
+				check("预设配置键都能被宿主 schema 解释（或已登记为例外）", summary !== undefined && summary.startsWith("✓"), out.slice(-800));
+			} catch (error) {
+				check("预设配置键都能被宿主 schema 解释（或已登记为例外）", false, String(error.stdout || error.message).slice(-800));
+			}
+		}
+	}
+}
+
 // ── 6. 不泄漏本机路径 ───────────────────────────────────────────────────────
 console.log("\n── 6. 机器路径泄漏 ──");
 const leaked = [];

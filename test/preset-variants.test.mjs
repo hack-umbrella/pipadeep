@@ -58,3 +58,82 @@ test('执行子预设：顶层是 entry 数组，且不含记录层与委派工�
 test('主 composition 保持 0.1.5- 可用的 worker-thread', () => {
   assert.match(readFileSync(main, 'utf8'), /dsh-workflow-worker-thread/)
 })
+
+/**
+ * v2.1.1 修的三处「静默失效」——都不是会报错的错误，只能靠断言锁住。
+ */
+
+test('执行子预设的人设必须挂在 dsh-persona，不能挂在 agent-instructions.text', () => {
+	for (const name of ['executor.cordis.yml', 'executor.cordis.next.yml']) {
+		const text = readFileSync(new URL(`../preset/pentest/${name}`, import.meta.url), 'utf8')
+		// dsh-agent-instructions 的 Config 没有 text 字段（0.2.2 实测：值被保留但从不读取）
+		assert.doesNotMatch(text, /name: '@deepseek-ai\/dsh-agent-instructions'\s*\n\s*config:\s*\n\s*text:/m,
+			`${name}: 人设写在 agent-instructions.text 里不会生效`)
+		assert.match(text, /name: '@deepseek-ai\/dsh-persona'/, `${name}: 人设必须由 dsh-persona 提供`)
+		assert.match(text, /^\s+prefix: \*pentest_executor_persona/m, `${name}: 0.2.x 认 prefix，必须给`)
+		assert.match(text, /^\s+text: &pentest_executor_persona/m, `${name}: 0.1.x 认 text，双写保留`)
+	}
+})
+
+test('composition 不得残留 0.2.x 已移除的 subagent 配置键', () => {
+	for (const name of ['agent.cordis.yml', 'agent.cordis.next.yml']) {
+		const text = readFileSync(new URL(`../preset/pentest/${name}`, import.meta.url), 'utf8')
+		// schemastery 会静默保留未知键 → 死键不会报错，只会误导后来人
+		assert.doesNotMatch(text, /^\s+backgroundMode:/m, `${name}: backgroundMode 是 0.1.x 死键`)
+		assert.doesNotMatch(text, /^\s+enableRunInBackground:/m, `${name}: enableRunInBackground 是 0.1.x 死键`)
+	}
+})
+
+test('preset-root 不再依赖不存在的 supportsPresetSelection 守卫', async () => {
+	const raw = readFileSync(new URL('../lib/preset-root.js', import.meta.url), 'utf8')
+	// 注释里会解释这段历史，只断言**代码**不再引用它
+	const code = raw.split('\n').filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join('\n')
+	assert.doesNotMatch(code, /supportsPresetSelection/, 'dsh 0.2.2 没有该方法，可选链恒为 undefined，判断等于死代码')
+	// 执行预设必须无条件注册：0.2.x 委派依赖 agentPreset
+	assert.match(raw, /id: "pentest-executor"/, '执行子预设必须始终注册')
+	assert.match(raw, /order: 999/, '执行预设应排在选择器末尾')
+	assert.match(raw, /order: 100/, '主预设应有稳定 order')
+})
+
+/**
+ * v2.1.1 实机（dsh 0.2.2-rc.1）探针发现的三个会导致 `broken` 的硬错误。
+ * 它们都不是静默失效——整份预设被判 broken 后，Web 选择器（只列 healthy 的）
+ * 会直接**看不到预设**，这正是用户报的「4 行都在跑但预设不出现」。
+ */
+
+test('composition 不得再单独挂 list-agents 子路径（0.2.2 已并入主包）', () => {
+	for (const name of ['agent.cordis.yml', 'agent.cordis.next.yml']) {
+		const text = readFileSync(new URL(`../preset/pentest/${name}`, import.meta.url), 'utf8')
+		// dsh-tool-subagent-control 的 exports 在 0.2.2 只剩 "."；子路径行会让预设 never started。
+		// 主包的 apply 自己会 registerListAgents(ctx)，因此这行本来也冗余。
+		assert.doesNotMatch(text, /dsh-tool-subagent-control\/list-agents/, `${name}: list-agents 子路径在 0.2.2 不存在`)
+		// 但仍需要主包那一行，否则没有 send_message / interrupt_agent
+		assert.match(text, /name: '@deepseek-ai\/dsh-tool-subagent-control'/, `${name}: 仍需挂主包`)
+	}
+})
+
+test('fs-search 的 sampleOverCapGlobResults 在所有预设里都必须给（0.2.2 起 required）', () => {
+	for (const name of ['agent.cordis.yml', 'agent.cordis.next.yml', 'executor.cordis.yml', 'executor.cordis.next.yml']) {
+		const text = readFileSync(new URL(`../preset/pentest/${name}`, import.meta.url), 'utf8')
+		const rows = text.split(/\n(?=- id: )/)
+		for (const row of rows) {
+			if (!row.includes('@deepseek-ai/dsh-tool-fs-search')) continue
+			assert.match(row, /sampleOverCapGlobResults:/, `${name}: 缺 sampleOverCapGlobResults 会让整份预设 invalid config`)
+		}
+	}
+})
+
+test('每个 cordis:group 若挂 compaction/pruner 服务，必须声明 isolate realm', () => {
+	for (const name of ['agent.cordis.yml', 'agent.cordis.next.yml', 'executor.cordis.yml', 'executor.cordis.next.yml']) {
+		const text = readFileSync(new URL(`../preset/pentest/${name}`, import.meta.url), 'utf8')
+		for (const row of text.split(/\n(?=- id: )/)) {
+			const isCompactionGroup = /name: cordis:group/.test(row)
+				&& /dsh-compaction-basic|dsh-compaction-tool-result-pruner/.test(row)
+			if (!isCompactionGroup) continue
+			// 0.2.2 mountPreset 会审计泄露到根 realm 的服务：
+			// "Preset services require isolate realms: compaction, toolResultPruner"
+			assert.match(row, /isolate:\s*\n\s+compaction: true/, `${name}: compaction group 必须 isolate`)
+			assert.match(row, /toolResultPruner: true/, `${name}: toolResultPruner 必须 isolate`)
+		}
+	}
+})
