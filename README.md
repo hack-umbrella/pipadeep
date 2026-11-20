@@ -159,9 +159,33 @@ Playwright(本机 Chrome, headless=new)  --proxy-->  mitmproxy :8081  --upstream
   **不依赖会话内从 1 重新计数的 asset id**，因此新一轮会话仍能正确对上同一漏洞。
 - **复测**：新一轮会话拿到结果后调用 `pentest_retest action=compare name=round1`，输出逐条差异报告
   （含复现步骤与 HTTP 证据引用）；`action=list` 列出该目标全部基线。
-- **Web 复测页**：「渗透」面板新增「复测」Tab，自动读取当前会话与基线对比，分组展示四类结论；
-  「查看完整复测报告」打开只读路由 `/api/pipadeep-pentest/retest.md?sessionId=…`。
+- **Web 复测页**：「渗透 › 漏洞」页的「复测」子页签自动读取当前会话与基线对比，分组展示四类结论；
+  完整交付报告走 `/api/pipadeep-pentest/report.md?sessionId=…`。
 - 旧的 `pentest_analyze action=retest`（传入 `previousPath`）仍保留，用于临时对比任意评估 JSON。
+
+### 一键复测（现场重放判定，v2.2.1）
+
+Web 复测页的「一键复测」会**真的重放请求**、抓本轮原始包并判定「仍存在 / 已修复 / 需人工确认」。
+它依赖一份**判定规格**——不知道该漏洞的判定请求和成功特征时，插件不会瞎猜，也不会发请求。
+
+1. 先生成骨架：`pentest_retest action=spec-scaffold name=round1`
+   → 在基线同目录产出 `reprobe-specs.mjs`（`$DSH_HOME/storages/baselines/<target>/`）。
+2. 把骨架里的 TODO 换成真实判定请求与「漏洞存在」特征：
+   ```js
+   export const specs = [{
+     id: 'idor',
+     match: ['IDOR'],                       // 与 finding 标题做「包含」匹配
+     label: 'IDOR 未授权读取用户',
+     requests: [{ method: 'GET', url: 'https://target/api/users/1', headers: {} }],
+     expect: { status: 200, bodyIncludes: ['phone'] }   // 命中=仍存在，不命中=已修复
+   }]
+   ```
+   需要更复杂判定时改写 `judge(responses) => ({ verdict, detail })`。
+3. 保存后回页面点「一键复测」即可（规格文件改动会自动失效缓存）。
+
+引擎自带的安全网：请求失败/超时/5xx/429 一律判「需人工确认」**绝不误报已修复**；
+规格里的请求域名必须命中基线目标或其子域，否则不发请求；匹配不到规格的条目标「需人工复测」。
+实测只读（写接口请用空体）、请求间隔 0.22s。
 
 ## 可配置环境变量
 
@@ -326,6 +350,7 @@ $DSH_HOME/storages/topology/<sessionId>.html
 
 | 版本 | 内容 |
 | :-- | :-- |
+| **v2.2.1** | **让「一键复测」真正可用**：v2.2.0 的 reprobe 引擎只有 `options.specs` 一个注入通道，而 Web 路由由浏览器触发、没人传 specs，引擎内置规格又是空的 —— 一键复测永远返回「需人工复测」且发 0 个请求。现在自动从**基线同目录的 `reprobe-specs.mjs`** 加载判定规格，新增声明式 `expect`（`status`/`bodyIncludes`/`bodyExcludes`，多数场景不必写 JS），新增 `pentest_retest action=spec-scaffold` 一键生成骨架，页面在未配置规格时给出可操作提示；规格文件 mtime 参与缓存失效判定 |
 | **v2.1.1** | **修 dsh 0.2.2 上预设被判 broken（Web 选择器看不到「渗透模式 Pro」）**：移除 0.2.2 已不存在的 `tool-subagent-control/list-agents` 子路径行；补 `fs-search.sampleOverCapGlobResults`（0.2.2 起 required）；给执行子预设的 compaction group 补 `isolate` realm；执行子 agent 人设从无效的 `agent-instructions.text` 改到 `dsh-persona.prefix`（此前从未生效）；清理 0.1.x 死键 `backgroundMode`/`enableRunInBackground`；新增 `scripts/audit-preset-keys.mjs` 并纳入发版门禁 |
 | **v2.1.0** | **完整复测工作流**：新增 `pentest_retest`（save/compare/list 基线快照，稳定对齐键=规则+资产实际值，不依赖会话内 asset id）；Web「渗透」面板新增「复测」Tab 展示修复/仍存在/新增/回归（含复现步骤与 HTTP 证据）+ 完整 Markdown 报告路由 |
 | **v2.0.4** | **报告质量：每个漏洞绑定原始 HTTP 流量**——`buildReport` 把 finding 的 `kind:http` 证据逐条内联（方法/URL/状态码/关键头/正文，敏感头脱敏、正文截断），复现过程改为带预期结果的编号步骤；截图改走只读证据路由；指挥官/执行子 agent 提示与报告/利用技能强制「HTTP 证据+清晰复现步骤」 |

@@ -1,6 +1,11 @@
 // reprobe 判定规格示例（Schema 说明 + 用例）
 //
-// 一键复测引擎 (lib/reprobe.mjs) 通过 `options.specs` 注入目标特定的判定规格；
+// 【放哪里】把本文件复制成 `<基线目录>/reprobe-specs.mjs` 并改成你的目标。
+//   基线目录形如 ~/.dsh/storages/baselines/<target>/，与 round1.json 同级。
+//   v2.2.1 起 reprobe 会**自动从这里加载**，Web 复测页点「一键复测」即生效；
+//   最快的起步方式是让 agent 调 `pentest_retest action=spec-scaffold` 生成骨架再填。
+//   （`options.specs` 仍可作为程序化注入通道，供测试/脚本使用。）
+//
 // 插件本体不内置任何具体目标的规则。每条规格：
 //
 //   {
@@ -14,6 +19,10 @@
 //     judge: (responses) => ({ verdict, detail })
 //       // responses 与 requests 一一对应：{ ok, status, statusText, headers, body, durationMs, error }
 //       // verdict ∈ 'open'（仍存在）| 'fixed'（已修复）| 'unclear'（需人工确认）
+//
+//     // 或者用声明式 expect（多数场景够用，不必写 JS）：
+//     // expect 描述「漏洞仍然存在」的特征——全部命中 = open，任一不满足 = fixed。
+//     expect: { status: 200, bodyIncludes: ['phone'], bodyExcludes: ['forbidden'] }
 //   }
 //
 // 引擎自带的安全网（无需在 judge 里重复处理）：

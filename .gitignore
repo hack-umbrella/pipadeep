@@ -6,3 +6,6 @@ npm-debug.log*
 # python bytecode cache (mitmproxy addon)
 __pycache__/
 *.pyc
+
+# sync-pentest-ui.mjs 的临时备份（避免误提交 547KB 产物）
+dev/.bundle-previous.client.js
