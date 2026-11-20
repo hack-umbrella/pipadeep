@@ -248,21 +248,24 @@ curl -sS -X POST -H 'content-type: application/json' \
 
 ## 效果图
 
-> 截图来自真实使用：桌面 App（dsh 0.2.2）+ 本插件 v2.2.1，授权目标为演示环境。
+> 截图来自真实使用：桌面 App（dsh 0.2.2）+ 本插件，授权目标为演示环境（已脱敏）。
 > 图片存放在 [`docs/screenshots/`](docs/screenshots/)。
 
 ### 探索链路
 
-goal → intent → fact → finding 的完整链路，边带「意图链 / 产出 / 推导自 / 证实」语义胶囊。
+goal → intent → fact → finding 的完整链路，边带「意图链 / 产出 / 推导自 / 证实」语义胶囊；
+节点按层分列，同层超过 8 个自动折列（v2.2.3），长会话也不会塌成细竖条。
 
 ![探索链路](docs/screenshots/01-explore.png)
 
 ### 漏洞列表与详情
 
-按严重度排序；每条含影响的资产、可复现步骤，以及绑定到该漏洞的原始 HTTP 流量。
+顶部按严重度汇总并可按等级筛选；左侧清单、右侧详情（描述 / 复现步骤 / 证据），
+每条漏洞带「详情 / 复测」子页签，右上角一键「导出报告」。
 
-![漏洞列表](docs/screenshots/02-findings.png)
+![漏洞列表与详情](docs/screenshots/02-findings.png)
 
+<!-- 待补：报告 / 复测 / 资产三张图。放好文件后取消下面的注释即可。
 ### 报告（含 HTTP 流量证据）
 
 每个漏洞内联请求/响应（方法 / URL / 状态码 / 关键头 / 正文），敏感头自动脱敏，可一键导出 `.md`。
@@ -280,11 +283,6 @@ goal → intent → fact → finding 的完整链路，边带「意图链 / 产�
 资产树（域名 → 子域 → IP → 服务 → 接口），可打开交互式拓扑图。
 
 ![资产](docs/screenshots/05-assets.png)
-
-<!--
-图片占位：docs/screenshots/ 里放入以下文件后本节即生效（见该目录 README.md 的清单）：
-  01-explore.png  02-findings.png  03-report.png  04-retest.png  05-assets.png
-在图片就位前，GitHub 会显示破图；如希望暂时不显示，把上面的 ![...](...) 行用注释包起来。
 -->
 
 ## 用法
@@ -530,6 +528,7 @@ $DSH_HOME/storages/topology/<sessionId>.html
 
 | 版本 | 内容 |
 | :-- | :-- |
+| **v2.2.4** | **文档**：README「效果图」收录 2 张真实界面截图（探索链路 / 漏洞列表与详情，目标 IP 已打码），其余 3 张（报告/复测/资产）暂以注释占位；`docs/screenshots/README.md` 补充已收录/待补清单与脱敏要求 |
 | **v2.2.3** | **修探索链路 / 资产图布局塌成细长两列**：节点原按「层 = 一列」单列排列，6 intents/37 facts/11 findings 的会话包围盒高达 4376px，而 ReactFlow 默认 `minZoom: 0.5` 把 `fitView` 需要的 0.14 强行放大 → 节点挤成两根竖条、左侧大片空白。改为**每列最多 8 行折列**（整体接近方阵）并把 `minZoom` 放宽到 0.15；实测同会话包围盒 4376→1184 高、横向利用率 48%→95% |
 | **v2.2.2** | **文档**：README 增补完整部署手册（前置检查 / 安装 / 验证 / 启用 / 升级 / 桌面 App 特殊处理 / 回滚卸载 / 故障排查），新增「效果图」章节与 `docs/screenshots/` 放图说明 |
 | **v2.2.1** | **让「一键复测」真正可用**：v2.2.0 的 reprobe 引擎只有 `options.specs` 一个注入通道，而 Web 路由由浏览器触发、没人传 specs，引擎内置规格又是空的 —— 一键复测永远返回「需人工复测」且发 0 个请求。现在自动从**基线同目录的 `reprobe-specs.mjs`** 加载判定规格，新增声明式 `expect`（`status`/`bodyIncludes`/`bodyExcludes`，多数场景不必写 JS），新增 `pentest_retest action=spec-scaffold` 一键生成骨架，页面在未配置规格时给出可操作提示；规格文件 mtime 参与缓存失效判定 |
